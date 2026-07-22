@@ -1,6 +1,7 @@
 Person 1 — Networking (lowest layer) (Anush)
 
 Owns
+
 socket(), bind(), listen(), accept(), poll(), recv(), send(), client management, event loop, multiple ports, connection timeout, nonblocking sockets
 
 Produces
@@ -27,6 +28,7 @@ Never touches sockets.
 Person 3 — Business Logic (Arina)
 
 Owns
+
 routing, GET, POST, DELETE, directory listing, uploads, CGI, file, access, autoindex, redirections
 
 This person receives
