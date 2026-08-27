@@ -3,14 +3,15 @@ NAME = webserv
 CXX = c++
 CXXFLAGS = -Wall -Wextra -Werror -std=c++98 -Iinclude
 
-SRCS = main.cpp src/Server.cpp
+SRCDIR = src
+SRC = main.cpp $(SRCDIR)/Server.cpp
 OBJDIR = obj
-OBJS = $(addprefix $(OBJDIR)/,$(SRCS:.cpp=.o))
+OBJ = $(addprefix $(OBJDIR)/,$(SRC:.cpp=.o))
 
 all: $(NAME)
 
-$(NAME): $(OBJS)
-	$(CXX) $(CXXFLAGS) $(OBJS) -o $(NAME)
+$(NAME): $(OBJ)
+	$(CXX) $(CXXFLAGS) $(OBJ) -o $(NAME)
 
 $(OBJDIR)/%.o: %.cpp
 	@mkdir -p $(dir $@)
