@@ -6,6 +6,31 @@
 #include "HttpTypes.hpp"
 #include "RequestHandler.hpp"
 
+// Arishi party check anelu hamara
+static void printResponse(const HTTPResponse& response)
+{
+    std::cout << "Status: "
+              << response.statusCode
+              << std::endl;
+
+    std::cout << "Body: "
+              << response.body
+              << std::endl;
+
+    std::map<std::string, std::string>::const_iterator it;
+
+    for (it = response.headers.begin();
+         it != response.headers.end();
+         ++it)
+    {
+        std::cout << it->first
+                  << ": "
+                  << it->second
+                  << std::endl;
+    }
+}
+
+
 int main()
 {
 	//Anulya part
@@ -33,10 +58,9 @@ int main()
     config.locations.push_back(uploadLocation);
     HTTPRequest request;
     request.method = "DELETE";
-    request.uri = "/uploads/cat.txt";
+    request.uri = "/images/cat.txt";
     RequestHandler handler;
-    HTTPResponse response =
-        handler.handleRequest(request, config);
+    HTTPResponse response = handler.handleRequest(request, config);
     printResponse(response);
 
 	return 0;
