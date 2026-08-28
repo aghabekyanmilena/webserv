@@ -4,7 +4,7 @@ CXX = c++
 CXXFLAGS = -Wall -Wextra -Werror -std=c++98 -Iinclude
 
 SRCDIR = src
-SRC = main.cpp $(SRCDIR)/Server.cpp
+SRC = main.cpp $(SRCDIR)/Server.cpp $(SRCDIR)/RequestHandler.cpp
 
 OBJDIR = obj
 OBJ = $(addprefix $(OBJDIR)/,$(SRC:.cpp=.o))
