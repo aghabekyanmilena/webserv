@@ -57,8 +57,8 @@ int main()
     uploadLocation.allowedMethods.push_back("DELETE");
     config.locations.push_back(uploadLocation);
     HTTPRequest request;
-    request.method = "DELETE";
-    request.uri = "/images/cat.txt";
+    request.method = "GET";
+    request.uri = "/uploads";
     RequestHandler handler;
     HTTPResponse response = handler.handleRequest(request, config);
     printResponse(response);

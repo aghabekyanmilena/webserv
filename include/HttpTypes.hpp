@@ -16,9 +16,5 @@ struct HTTPResponse
     int statusCode;
     std::string body;
     std::map<std::string, std::string> headers;
-
-    HTTPResponse()
-        : statusCode(200)
-    {
-    }
+    HTTPResponse() : statusCode(200) {}
 };

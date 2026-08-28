@@ -16,15 +16,9 @@ struct LocationConfig
     bool hasRedirect;
     int redirectCode;
     std::string redirectTarget;
-
     std::string uploadDirectory;
 
-    LocationConfig()
-        : autoindex(false),
-          hasRedirect(false),
-          redirectCode(0)
-    {
-    }
+    LocationConfig() : autoindex(false), hasRedirect(false), redirectCode(0) {}
 };
 
 struct ServerConfig
@@ -33,8 +27,5 @@ struct ServerConfig
     std::map<int, std::string> errorPages;
     std::size_t maxBodySize;
 
-    ServerConfig()
-        : maxBodySize(0)
-    {
-    }
+    ServerConfig() : maxBodySize(0) {}
 };
