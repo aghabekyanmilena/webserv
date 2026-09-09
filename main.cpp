@@ -9,27 +9,13 @@
 // Arishi party check anelu hamara
 static void printResponse(const HTTPResponse& response)
 {
-    std::cout << "Status: "
-              << response.statusCode
-              << std::endl;
-
-    std::cout << "Body: "
-              << response.body
-              << std::endl;
-
+    std::cout << "Status: " << response.statusCode << std::endl;
+    std::cout << "Body: " << response.body << std::endl;
     std::map<std::string, std::string>::const_iterator it;
 
-    for (it = response.headers.begin();
-         it != response.headers.end();
-         ++it)
-    {
-        std::cout << it->first
-                  << ": "
-                  << it->second
-                  << std::endl;
-    }
+    for (it = response.headers.begin(); it != response.headers.end(); ++it)
+        std::cout << it->first << ": " << it->second << std::endl;
 }
-
 
 int main()
 {

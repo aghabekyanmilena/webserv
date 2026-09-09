@@ -8,7 +8,7 @@
 
 bool RequestHandler::isLocationMatch(const std::string& uri, const std::string& locationPath) const
 {
-    //uri = client-i tvacna, locationPath-y mer serveri configna
+    //uri = client-i tvacna, locationPath-y mer serveri configica
     if (locationPath == "/") //default root location
         return true; //location-y okaya
     if (uri == locationPath)
@@ -77,22 +77,22 @@ HTTPResponse RequestHandler::makeErrorResponse(int statusCode, const std::string
 
 HTTPResponse RequestHandler::handleRequest(const HTTPRequest& request, const ServerConfig& serverConfig)
 {
-    const LocationConfig* location = findLocation(request.uri, serverConfig);
+    const LocationConfig* location = findLocation(request.uri, serverConfig); // serverConfigi mejic gtnuma clineti uri-y
     if (location == NULL)
         return makeErrorResponse(404, "404 Not Found");
-    if (!isSupportedMethod(request.method))
+    if (!isSupportedMethod(request.method)) // checka anum methody ka te che
         return makeErrorResponse(501, "501 Not Implemented");
-    if (!isMethodAllowed(request.method, *location))
+    if (!isMethodAllowed(request.method, *location)) // allow araca et methody te che
     {
-        HTTPResponse response = makeErrorResponse(405, "405 Method Not Allowed");
-        response.headers["Allow"] = buildAllowHeader(*location);
+        HTTPResponse response = makeErrorResponse(405, "405 Method Not Allowed"); // ka methody bayc allow arac chi et locationum
+        response.headers["Allow"] = buildAllowHeader(*location); // asuma voronqa allow tvac
         return response;
     }
-    if (location->hasRedirect)
+    if (location->hasRedirect) // ardyoq locationy redirecta?
     {
         HTTPResponse response;
         response.statusCode = location->redirectCode;
-        response.headers["Location"] = location->redirectTarget;
+        response.headers["Location"] = location->redirectTarget; // asuma clientin ur piti gna
         return response;
     }
     if (request.method == "GET")
@@ -108,8 +108,8 @@ HTTPResponse RequestHandler::handleGet(const HTTPRequest& request, const Locatio
 {
     std::string relativePath = request.uri;
 
-    if (location.path != "/" && relativePath.compare(0, location.path.size(), location.path) == 0)
-        relativePath = relativePath.substr(location.path.size());
+    if (location.path != "/" && relativePath.compare(0, location.path.size(), location.path) == 0) //Does "/uploads/cat.txt" begin with "/uploads"?
+        relativePath = relativePath.substr(location.path.size()); // pahuma upload-ic heton
     if (relativePath.empty())
         relativePath = "/";
     std::string filePath = location.root + relativePath;
@@ -177,18 +177,12 @@ HTTPResponse RequestHandler::handleGet(const HTTPRequest& request, const Locatio
 
                 if (stat(entryPath.c_str(), &entryInfo) == 0 && S_ISDIR(entryInfo.st_mode))
                     isDirectory = true;
-                html << "        <li><a href=\""
-                     << name;
-
+                html << "        <li><a href=\"" << name;
                 if (isDirectory)
                     html << "/";
-
-                html << "\">"
-                     << name;
-
+                html << "\">" << name;
                 if (isDirectory)
                     html << "/";
-
                 html << "</a></li>\n";
             }
 
@@ -200,8 +194,7 @@ HTTPResponse RequestHandler::handleGet(const HTTPRequest& request, const Locatio
             HTTPResponse response;
             response.statusCode = 200;
             response.body = html.str();
-            response.headers["Content-Type"] =
-                "text/html";
+            response.headers["Content-Type"] = "text/html";
             return response;
         }
     }
