@@ -1,4 +1,5 @@
 #include "Server.hpp"
+#include "Client.hpp"
 
 Server::Server(int port) : _server_fd(-1), _port(port)
 {
@@ -92,5 +93,7 @@ void Server::start()
     if (!listen_socket())
         return;
 
-    accept_client();
+    Client first_client;
+    first_client.client_fd = accept_client();
+    close(first_client.client_fd);
 }
