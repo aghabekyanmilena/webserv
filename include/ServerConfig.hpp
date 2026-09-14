@@ -3,15 +3,16 @@
 #include <iostream>
 #include <vector>
 #include <map>
+#include "Location.hpp"
 
 class ServerConfig
 {
 private:
-	std::vector<int> _listenPorts;
-	std::vector<Location> _locations;
-	std::map<int, std::string> _errorPages;
+	std::vector<int> listenPorts;
+	std::vector<Location> locations;
+	std::map<int, std::string> errorPages;
 
-	size_t _maxBodySize;
+	size_t maxBodySize;
 
 public:
 	void addListenPort(int port);
