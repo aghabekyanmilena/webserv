@@ -47,3 +47,5 @@ public:
 	const std::vector<ServerConfig> &getServers() const;
 	bool validate() const;
 };
+
+// stex chka constructor u destructor

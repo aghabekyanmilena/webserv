@@ -11,7 +11,7 @@ private:
 	std::vector<int> listen_ports;
 	std::vector<Location> locations;
 	std::map<int, std::string> error_pages;
-	std::size_t max_body_size;
+	size_t max_body_size;
 
 public:
 	ServerConfig();
@@ -22,10 +22,11 @@ public:
 	void addListenPort(int port);
 	void addLocation(const Location &location);
 	void addErrorPage(int statusCode, const std::string &path);
-	void setMaxBodySize(std::size_t size);
+	void setMaxBodySize(size_t size);
+
 	const std::vector<int> &getListenPorts() const;
 	const std::vector<Location> &getLocations() const;
 	const std::map<int, std::string> &getErrorPages() const;
-	std::size_t getMaxBodySize() const;
+	size_t getMaxBodySize() const;
 	const Location* findLocation(const std::string &path) const;
 };

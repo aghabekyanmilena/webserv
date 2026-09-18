@@ -38,7 +38,7 @@ void ServerConfig::addErrorPage(int statusCode, const std::string &path)
 	error_pages[statusCode] = path;
 }
 
-void ServerConfig::setMaxBodySize(std::size_t size)
+void ServerConfig::setMaxBodySize(size_t size)
 {
 	max_body_size = size;
 }
@@ -58,7 +58,7 @@ const std::map<int, std::string> &ServerConfig::getErrorPages() const
 	return error_pages;
 }
 
-std::size_t ServerConfig::getMaxBodySize() const
+size_t ServerConfig::getMaxBodySize() const
 {
 	return max_body_size;
 }
