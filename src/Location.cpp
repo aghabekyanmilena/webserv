@@ -59,4 +59,59 @@ void Location::allowedMethod(const std::string &method)
 	allowed_method.push_back(method);
 }
 
-// set redir-ic sksac
+void Location::setRedirect(int code, const std::string &target)
+{
+	has_redir = true;
+	redir_code = code;
+	redir_target = target;
+}
+
+void Location::setUploadDirectory(const std::string &dir)
+{
+	upload_directory = dir;
+}
+
+const std::string &Location::getPath() const
+{
+	return path;
+}
+
+const std::string &Location::getRoot() const
+{
+	return root;
+}
+
+const std::string &Location::getIndex() const
+{
+	return index;
+}
+
+bool Location::getAutoindex() const
+{
+	return autoindex;
+}
+
+const std::vector<std::string> &getAllowedMethods() const
+{
+	return allowed_method;
+}
+
+bool Location::hasRedirect() const
+{
+	return has_redir;
+}
+
+int Location::getRedirectCode() const
+{
+	return redir_code;
+}
+
+const std::string &Location::getRedirectTarget() const
+{
+	return redir_target;
+}
+
+const std::string &Location::getUploadDirectory() const
+{
+	return upload_directory;
+}
