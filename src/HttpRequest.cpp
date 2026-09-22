@@ -42,4 +42,42 @@ void HttpRequest::setChunked(bool value)
 	chunked = value;
 }
 
-// getters
+const std::string &HttpRequest::getMethod() const
+{
+	return method;
+}
+
+const std::string &HttpRequest::getPath() const
+{
+	return path;
+}
+
+const std::string &HttpRequest::getQuery() const
+{
+	return query;
+}
+
+const std::string &HttpRequest::getVersion() const
+{
+	return version;
+}
+
+const std::map<std::string, std::string> &HttpRequest::getHeaders() const
+{
+	return headers;
+}
+
+const std::string &HttpRequest::getBody() const
+{
+	return body;
+}
+
+size_t HttpRequest::getContentLength() const
+{
+	return content_length;
+}
+
+bool HttpRequest::isChunked() const
+{
+	return chunked;
+}

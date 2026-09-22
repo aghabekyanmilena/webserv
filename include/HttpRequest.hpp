@@ -35,6 +35,6 @@ public:
 	const std::string& getBody() const;
 	size_t getContentLength() const;
 	bool isChunked() const;
-}
+};
 
 // constructors and destructor

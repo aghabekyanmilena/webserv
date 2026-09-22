@@ -41,4 +41,4 @@ public:
 	int getRedirectCode() const;
 	const std::string &getRedirectTarget() const;
 	const std::string &getUploadDirectory() const;
-}
+};

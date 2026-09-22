@@ -5,4 +5,3 @@ class Server
 public:
 	Server();
 };
-
