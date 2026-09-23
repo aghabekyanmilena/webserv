@@ -1,6 +1,12 @@
 #pragma once
 
+#include <iostream>
 #include <string>
+#include <cstring>
+#include <sys/socket.h>
+#include <stdio.h>
+#include <arpa/inet.h>
+#include <unistd.h>
 
 class ServerSocket
 {
@@ -9,6 +15,7 @@ private:
     std::string _host;
     int         _port;
 
+    struct sockaddr_in create_addr() const;
 public:
     ServerSocket(const std::string& host, int port);
     ~ServerSocket();
