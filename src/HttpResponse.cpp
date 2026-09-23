@@ -1,43 +1,44 @@
 #include "../include/HttpResponse.hpp"
 
-HTTPResponse::~HTTPResponse() {}
+HttpResponse::HttpResponse() : status_code(200), reason_phrase("OK")
+{}
 
-void HTTPResponse::setStatusCode(int code)
+void HttpResponse::setStatusCode(int code)
 {
-	status_code = code;
+	this->status_code = code;
 }
 
-void HTTPResponse::setReasonPhrase(const std::string& reason)
+void HttpResponse::setReasonPhrase(const std::string& reason)
 {
-	reason_phrase = reason;
+	this->reason_phrase = reason;
 }
 
-void HTTPResponse::setHeader(const std::string& name, const std::string& value)
+void HttpResponse::setHeader(const std::string& name, const std::string& value)
 {
 	headers[name] = value;
 }
 
-void HTTPResponse::setBody(const std::string& body)
+void HttpResponse::setBody(const std::string& body)
 {
-	body = body;
+	this->body = body;
 }
 
-int HTTPResponse::getStatusCode() const
+int HttpResponse::getStatusCode() const
 {
 	return status_code;
 }
 
-const std::string& HTTPResponse::getReasonPhrase() const
+const std::string& HttpResponse::getReasonPhrase() const
 {
 	return reason_phrase;
 }
 
-const std::map<std::string, std::string> &HTTPResponse::getHeaders() const
+const std::map<std::string, std::string> &HttpResponse::getHeaders() const
 {
 	return headers;
 }
 
-const std::string& HTTPResponse::getBody() const
+const std::string& HttpResponse::getBody() const
 {
 	return body;
 }

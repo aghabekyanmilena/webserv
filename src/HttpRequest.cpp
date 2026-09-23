@@ -4,22 +4,22 @@ HttpRequest::HttpRequest() : content_length(0), chunked(false) {}
 
 void HttpRequest::setMethod(const std::string &method)
 {
-	method = method;
+	this->method = method;
 }
 
 void HttpRequest::setPath(const std::string &path)
 {
-	path = path;
+	this->path = path;
 }
 
 void HttpRequest::setQuery(const std::string &query)
 {
-	query = query;
+	this->query = query;
 }
 
 void HttpRequest::setVersion(const std::string &version)
 {
-	version = version;
+	this->version = version;
 }
 
 void HttpRequest::setHeader(const std::string &name, const std::string value)
@@ -29,7 +29,7 @@ void HttpRequest::setHeader(const std::string &name, const std::string value)
 
 void HttpRequest::setBody(const std::string &body)
 {
-	body = body;
+	this->body = body;
 }
 
 void HttpRequest::setContentLength(size_t length)

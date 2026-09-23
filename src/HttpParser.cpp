@@ -1,8 +1,7 @@
 #include "../include/HttpParser.hpp"
-#include <sstream>
 
 HttpParser::ParseResult
-HttpParser::parse(const std::string& raw, HTTPRequest& request) const
+HttpParser::parse(const std::string& raw, HttpRequest &request) const
 {
 	std::size_t headerEnd = raw.find("\r\n\r\n");
 
@@ -37,7 +36,7 @@ HttpParser::parse(const std::string& raw, HTTPRequest& request) const
 	return COMPLETE;
 }
 
-bool HttpParser::parseRequestLine(const std::string& line, HTTPRequest& request) const
+bool HttpParser::parseRequestLine(const std::string& line, HttpRequest& request) const
 {
 	std::stringstream ss(line);
 	std::string method;
@@ -70,7 +69,7 @@ bool HttpParser::parseRequestLine(const std::string& line, HTTPRequest& request)
 	return true;
 }
 
-bool HttpParser::parseHeaders(const std::string& headerBlock, HTTPRequest& request) const
+bool HttpParser::parseHeaders(const std::string& headerBlock, HttpRequest& request) const
 {
 	std::stringstream ss(headerBlock);
 	std::string line;
@@ -104,7 +103,7 @@ bool HttpParser::parseHeaders(const std::string& headerBlock, HTTPRequest& reque
 }
 
 HttpParser::ParseResult
-HttpParser::parseBody(const std::string& body, HTTPRequest& request) const
+HttpParser::parseBody(const std::string &body, HttpRequest &request) const
 {
 	const std::map<std::string, std::string>& headers = request.getHeaders();
 	std::map<std::string, std::string>::const_iterator it = headers.find("Content-Length");

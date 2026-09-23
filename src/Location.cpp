@@ -36,22 +36,22 @@ Location::~Location() {}
 
 void Location::setPath(const std::string &path)
 {
-	path = path;
+	this->path = path;
 }
 
 void Location::setRoot(const std::string &root)
 {
-	root = root;
+	this->root = root;
 }
 
 void Location::setIndex(const std::string &index)
 {
-	index = index;
+	this->index = index;
 }
 
 void Location::setAutoindex(bool value)
 {
-	autoindex = value;
+	this->autoindex = value;
 }
 
 void Location::allowedMethod(const std::string &method)
@@ -61,9 +61,9 @@ void Location::allowedMethod(const std::string &method)
 
 void Location::setRedirect(int code, const std::string &target)
 {
-	has_redir = true;
-	redir_code = code;
-	redir_target = target;
+	this->has_redir = true;
+	this->redir_code = code;
+	this->redir_target = target;
 }
 
 void Location::setUploadDirectory(const std::string &dir)
@@ -91,7 +91,7 @@ bool Location::getAutoindex() const
 	return autoindex;
 }
 
-const std::vector<std::string> &getAllowedMethods() const
+const std::vector<std::string> &Location::getAllowedMethods() const
 {
 	return allowed_method;
 }

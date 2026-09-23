@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <sstream>
 #include "HttpRequest.hpp"
 
 class HttpParser
@@ -12,10 +13,10 @@ public:
 		COMPLETE,
 		ERROR
 	};
-	ParseResult parse(const std::string &raw, HTTPRequest &request) const;
+	ParseResult parse(const std::string &raw, HttpRequest &request) const;
 
 private:
-	bool parseRequestLine(const std::string &line, HTTPRequest &request) const;
-	bool parseHeaders(const std::string &headerBlock, HTTPRequest &request) const;
-	bool parseBody(const std::string &body, HTTPRequest &request) const;
+	bool parseRequestLine(const std::string &line, HttpRequest &request) const;
+	bool parseHeaders(const std::string &headerBlock, HttpRequest &request) const;
+	ParseResult parseBody(const std::string &body, HttpRequest &request) const;
 };
