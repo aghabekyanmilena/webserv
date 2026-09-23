@@ -1,14 +1,49 @@
 #pragma once
 
 #include <string>
+#include <ctime>
 
 class Client
 {
+private:
+    int         _fd;
+
+    std::string _readBuffer;
+    std::string _writeBuffer;
+
+    std::time_t _lastActivity;
+
+    bool        _responsePending;
+    bool        _closed;
+
 public:
-    int client_fd;
+    Client(int fd);
+    ~Client();
 
-    std::string input_buffer;
+    // Identification
+    int getFd() const;
 
-    std::string output_buffer;
-    size_t write_offset;
+    // Receiving
+    bool receiveData();
+
+    const std::string& getReadBuffer() const;
+    void clearReadBuffer();
+
+    // Sending
+    void setResponse(const std::string& response);
+    bool sendData();
+
+    bool hasPendingResponse() const;
+
+    // Timeout
+    void updateActivity();
+    std::time_t getLastActivity() const;
+    bool hasTimedOut(std::time_t now, int timeoutSeconds) const;
+
+    // State
+    bool isClosed() const;
+    void markClosed();
+
+    // Cleanup
+    void closeConnection();
 };

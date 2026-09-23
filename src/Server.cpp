@@ -93,7 +93,5 @@ void Server::start()
     if (!listen_socket())
         return;
 
-    Client first_client;
-    first_client.client_fd = accept_client();
-    close(first_client.client_fd);
+        
 }
