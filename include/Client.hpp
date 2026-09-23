@@ -2,6 +2,7 @@
 
 #include <string>
 #include <ctime>
+#include <iostream>
 
 class Client
 {
