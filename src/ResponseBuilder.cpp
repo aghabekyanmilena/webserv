@@ -1,7 +1,7 @@
 #include "../include/ResponseBuilder.hpp"
 #include <sstream>
 
-std::string ResponseBuilder::serialize(const HTTPResponse& response)
+std::string ResponseBuilder::serialize(const HttpResponse& response)
 {
 	std::ostringstream output;
 
@@ -28,9 +28,9 @@ std::string ResponseBuilder::serialize(const HTTPResponse& response)
 	return output.str();
 }
 
-HTTPResponse ResponseBuilder::makeError(int statusCode, const std::string& body)
+HttpResponse ResponseBuilder::makeError(int statusCode, const std::string& body)
 {
-	HTTPResponse response;
+	HttpResponse response;
 
 	response.setStatusCode(statusCode);
 	response.setReasonPhrase("Error");

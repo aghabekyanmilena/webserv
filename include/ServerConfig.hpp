@@ -28,5 +28,5 @@ public:
 	const std::vector<Location> &getLocations() const;
 	const std::map<int, std::string> &getErrorPages() const;
 	size_t getMaxBodySize() const;
-	const Location* findLocation(const std::string &path) const;
+	const Location *findLocation(const std::string &path) const;
 };

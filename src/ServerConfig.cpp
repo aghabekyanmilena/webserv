@@ -62,3 +62,13 @@ size_t ServerConfig::getMaxBodySize() const
 {
 	return max_body_size;
 }
+
+const Location *ServerConfig::findLocation(const std::string &path) const
+{
+	for (std::size_t i = 0; i < locations.size(); ++i)
+	{
+		if (path.find(locations[i].getPath()) == 0)
+			return &locations[i];
+	}
+	return NULL;
+}
