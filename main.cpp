@@ -1,10 +1,21 @@
-#include "Server.hpp"
-#include "Client.hpp"
+#include "NetworkManager.hpp"
+
+#include <iostream>
 
 int main()
 {
-	Server server(8080);
-	server.start();
-	// while (true) { };
-	return 0;
+    NetworkManager network;
+
+    // Test multiple listening ports.
+    network.addServer("0.0.0.0", 8080);
+    network.addServer("0.0.0.0", 8081);
+
+    network.initializeServers();
+
+    std::cout << "Networking test started." << std::endl;
+    std::cout << "Listening on ports 8080 and 8081." << std::endl;
+
+    network.run();
+
+    return 0;
 }
