@@ -106,13 +106,9 @@ HTTPResponse RequestHandler::handleRequest(const HTTPRequest& request, const Ser
 
 HTTPResponse RequestHandler::handleGet(const HTTPRequest& request, const LocationConfig& location)
 {
-    std::string relativePath = request.uri;
-
-    if (location.path != "/" && relativePath.compare(0, location.path.size(), location.path) == 0) //Does "/uploads/cat.txt" begin with "/uploads"?
-        relativePath = relativePath.substr(location.path.size()); // pahuma upload-ic heton
-    if (relativePath.empty())
-        relativePath = "/";
-    std::string filePath = location.root + relativePath;
+    if (!isPathSafe(request.uri))
+        return makeErrorResponse(403, "403 Forbidden");
+    std::string filePath = buildFilePath(request.uri, location);
 
     struct stat fileInfo;
     if (stat(filePath.c_str(), &fileInfo) != 0)
@@ -213,28 +209,101 @@ HTTPResponse RequestHandler::handleGet(const HTTPRequest& request, const Locatio
     HTTPResponse response;
     response.statusCode = 200;
     response.body = content.str();
-    response.headers["Content-Type"] = "text/html";
+    response.headers["Content-Type"] = getMimeType(filePath);
     return response;
 }
 
 HTTPResponse RequestHandler::handlePost(const HTTPRequest& request, const LocationConfig& location)
 {
-    (void)request;
-    (void)location;
+    if (!isPathSafe(request.uri))
+        return makeErrorResponse(403, "403 Forbidden");
+
+    if (request.uri == location.path || request.uri == location.path + "/")
+        return makeErrorResponse(400, "400 Bad Request");
+
+    std::string filePath = location.uploadDirectory + request.uri.substr(location.path.size());
+    std::ofstream file(filePath.c_str(), std::ios::out | std::ios::binary);
+
+    if (!file.is_open())
+        return makeErrorResponse(500, "500 Internal Server Error");
+
+    file << request.body;
+    file.close();
 
     HTTPResponse response;
-    response.statusCode = 200;
-    response.body = "POST is allowed";
+    response.statusCode = 201;
+    response.body = "File uploaded successfully";
+    response.headers["Content-Type"] = "text/plain";
     return response;
 }
 
 HTTPResponse RequestHandler::handleDelete(const HTTPRequest& request, const LocationConfig& location)
 {
-    (void)request;
-    (void)location;
+    std::string filePath = buildFilePath(request.uri, location);
+
+    struct stat fileInfo;
+    if (stat(filePath.c_str(), &fileInfo) != 0)
+        return makeErrorResponse(404, "404 Not Found");
+
+    if (!S_ISREG(fileInfo.st_mode))
+        return makeErrorResponse(403, "403 Forbidden");
+
+    if (std::remove(filePath.c_str()) != 0)
+        return makeErrorResponse(500, "500 Internal Server Error");
 
     HTTPResponse response;
-    response.statusCode = 200;
-    response.body = "DELETE is allowed";
+    response.statusCode = 204;
+    response.body = "";
     return response;
+}
+
+std::string RequestHandler::getMimeType(const std::string& filePath) const
+{
+    std::size_t dot = filePath.rfind('.');
+    
+    if (dot == std::string::npos)
+        return "application/octet-stream";
+
+    std::string extension = filePath.substr(dot);
+
+    if (extension == ".html" || extension == ".htm")
+        return "text/html";
+    if (extension == ".css")
+        return "text/css";
+    if (extension == ".js")
+        return "application/javascript";
+    if (extension == ".txt")
+        return "text/plain";
+    if (extension == ".jpg" || extension == ".jpeg")
+        return "image/jpeg";
+    if (extension == ".png")
+        return "image/png";
+    if (extension == ".gif")
+        return "image/gif";
+    if (extension == ".svg")
+        return "image/svg+xml";
+
+    return "application/octet-stream";
+}
+
+std::string RequestHandler::buildFilePath(const std::string& uri, const LocationConfig& location) const
+{
+    std::string relativePath = uri;
+
+    if (location.path != "/" && relativePath.compare(0, location.path.size(), location.path) == 0)
+        relativePath = relativePath.substr(location.path.size());
+    if (relativePath.empty())
+        relativePath = "/";
+    return location.root + relativePath;
+}
+
+bool RequestHandler::isPathSafe(const std::string& path) const
+{
+    if (path == "..")
+        return false;
+    if (path.find("../") != std::string::npos)
+        return false;
+    if (path.find("/..") != std::string::npos)
+        return false;
+    return true;
 }

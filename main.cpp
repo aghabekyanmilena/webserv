@@ -36,6 +36,7 @@ int main()
     LocationConfig uploadLocation;
     uploadLocation.path = "/uploads";
     uploadLocation.root = "./www/uploads";
+    uploadLocation.uploadDirectory = "./www/uploads";
     uploadLocation.index = "index.html";
     uploadLocation.autoindex = true;
     uploadLocation.allowedMethods.push_back("GET");
@@ -43,8 +44,9 @@ int main()
     uploadLocation.allowedMethods.push_back("DELETE");
     config.locations.push_back(uploadLocation);
     HTTPRequest request;
-    request.method = "GET";
-    request.uri = "/uploads";
+    request.method = "DELETE";
+    request.uri = "/uploads/../../test.txt";
+    request.body = "";
     RequestHandler handler;
     HTTPResponse response = handler.handleRequest(request, config);
     printResponse(response);

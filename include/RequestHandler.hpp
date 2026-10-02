@@ -9,6 +9,7 @@ class RequestHandler
         HTTPResponse handleRequest(const HTTPRequest& request, const ServerConfig& serverConfig);  // Receives request, and returns response.
 
     private:
+        std::string getMimeType(const std::string& filePath) const;
         const LocationConfig* findLocation(const std::string& uri, const ServerConfig& serverConfig) const; // Finds the longest matching location for the requested URI.
         bool isLocationMatch(const std::string& uri, const std::string& locationPath) const; // Checks whether a URI belongs to a location.
         bool isSupportedMethod(const std::string& method) const; // Checks whether Webserv supports the method: GET, POST or DELETE.
@@ -19,4 +20,5 @@ class RequestHandler
         HTTPResponse handleDelete(const HTTPRequest& request, const LocationConfig& location);  // Handles DELETE requests and removes resources.
         HTTPResponse makeErrorResponse(int statusCode, const std::string& message) const; // Creates an error response, example: 404 Not Found.
         std::string buildFilePath(const std::string& uri, const LocationConfig& location) const; // Converts a client URI into a path. /uploads/cat.txt->./www/uploads/cat.txt
+        bool isPathSafe(const std::string& path) const;
 };
