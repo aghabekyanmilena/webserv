@@ -1,4 +1,17 @@
-strace -f -e trace=socket,setsockopt,bind,listen,accept,recvfrom,sendto,poll,close ./webserv
+anush-tserunyan@anush-tserunyan-laptop:~$ ss -tn | grep 8080 // CHECK CONNECTIONS
+
+
+
+
+
+anush-tserunyan@anush-tserunyan-laptop:~$ nc 127.0.0.1 8081 // CONNECT
+
+
+
+
+
+
+anush-tserunyan@anush-tserunyan-laptop:~/webserv$ strace -f -e trace=socket,setsockopt,bind,listen,accept,recvfrom,sendto,poll,close ./webserv // ANALYZE
 close(3)                                = 0
 close(3)                                = 0
 close(3)                                = 0
