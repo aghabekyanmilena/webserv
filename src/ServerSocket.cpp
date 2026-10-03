@@ -130,25 +130,6 @@ bool ServerSocket::listenSocket()
     return true;
 }
 
-bool ServerSocket::setNonBlocking()
-{
-    if (_fd == -1)
-        return false;
-
-    /*
-     * Use only F_SETFL + O_NONBLOCK.  This is deliberately compatible with
-     * the subject's restricted fcntl usage on macOS as well.
-     */
-    if (fcntl(_fd, F_SETFL, O_NONBLOCK) == -1)
-    {
-        std::cerr << "fcntl(O_NONBLOCK) failed for "
-                  << _host << ":" << _port << std::endl;
-        return false;
-    }
-
-    return true;
-}
-
 int ServerSocket::acceptClient()
 {
     if (_fd == -1)

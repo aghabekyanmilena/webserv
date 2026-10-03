@@ -24,7 +24,6 @@ public:
     bool create();
     bool bindSocket();
     bool listenSocket();
-    bool setNonBlocking();
 
     // Connection
     int acceptClient();

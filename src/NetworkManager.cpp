@@ -36,7 +36,7 @@ void NetworkManager::initializeServers()
         if (!it->create())
             continue;
 
-        if (!it->setNonBlocking() || !it->bindSocket() || !it->listenSocket())
+        if (!it->bindSocket() || !it->listenSocket())
         {
             it->closeSocket();
             continue;
