@@ -13,13 +13,16 @@ static bool processRequest(const std::string &raw, const ServerConfig &config,
 {
 	HttpRequest parsed;
 	HttpParser parser;
-	const HttpParser::ParseResult result = parser.parse(raw, parsed);
+	const std::size_t maxBody = config.getMaxBodySize();
+	const HttpParser::ParseResult result = parser.parse(raw, parsed, maxBody);
 	HTTPResponse response;
-	const bool tooLarge = parsed.getContentLength() > config.getMaxBodySize() || parsed.getBody().size() > config.getMaxBodySize();
-	if (!tooLarge && result == HttpParser::INCOMPLETE)
+
+	if (result == HttpParser::INCOMPLETE)
 		return false;
 
-	if (tooLarge)
+	if (result == HttpParser::TOO_LARGE
+		|| parsed.getContentLength() > maxBody
+		|| parsed.getBody().size() > maxBody)
 		response.statusCode = 413;
 	else if (result == HttpParser::ERROR)
 		response.statusCode = 400;
@@ -28,6 +31,7 @@ static bool processRequest(const std::string &raw, const ServerConfig &config,
 		HTTPRequest request;
 		request.method = parsed.getMethod();
 		request.uri = parsed.getPath();
+		request.query = parsed.getQuery();
 		request.body = parsed.getBody();
 		request.headers = parsed.getHeaders();
 		RequestHandler handler;
@@ -62,13 +66,13 @@ int main(int argc, char **argv)
 {
 	if (argc != 2)
 	{
-		std::cerr << "Usage: " << argv[0] << " [config.conf]" << std::endl;
+		std::cerr << "Usage: " << argv[0] << " [configuration file]" << std::endl;
 		return 1;
 	}
 	try
 	{
 		Config config;
-		config.parseFile(argc == 2 ? argv[1] : "configs/webserv.conf");
+		config.parseFile(argv[1]);
 		NetworkManager network;
 		network.setRequestProcessor(processRequest);
 		const std::vector<ServerConfig> &servers = config.getServers();
