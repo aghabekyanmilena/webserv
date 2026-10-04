@@ -132,7 +132,7 @@ Location ConfigParser::location()
 		else if (key == "allowed_methods")
 		{
 			std::set<std::string> methods;
-			for (;;)
+			while (true)
 			{
 				if (arg != "GET" && arg != "POST" && arg != "DELETE")
 					fail("unsupported method '" + arg + "'");
