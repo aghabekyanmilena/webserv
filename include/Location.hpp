@@ -16,6 +16,8 @@ private:
 	int redir_code;
 	std::string redir_target;
 	std::string upload_directory;
+	std::string cgi_extension;
+	std::string cgi_path;
 public:
 	Location();
 	Location(const Location &other);
@@ -30,6 +32,11 @@ public:
 	void allowedMethod(const std::string &method);
 	void setRedirect(int code, const std::string &target);
 	void setUploadDirectory(const std::string &directory);
+
+	void setCgiExtension(const std::string &value);
+	void setCgiPath(const std::string &value);
+	const std::string &getCgiExtension() const;
+	const std::string &getCgiPath() const;
 
 	//getter
 	const std::string &getPath() const;

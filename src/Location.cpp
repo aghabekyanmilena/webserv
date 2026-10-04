@@ -12,7 +12,8 @@ Location::Location(const Location &other)
 	has_redir(other.has_redir),
 	redir_code(other.redir_code),
 	redir_target(other.redir_target),
-	upload_directory(other.upload_directory)
+	upload_directory(other.upload_directory),
+	cgi_extension(other.cgi_extension), cgi_path(other.cgi_path)
 {}
 
 Location &Location::operator=(const Location &other)
@@ -28,6 +29,8 @@ Location &Location::operator=(const Location &other)
 		redir_code = other.redir_code;
 		redir_target = other.redir_target;
 		upload_directory = other.upload_directory;
+		cgi_extension = other.cgi_extension;
+		cgi_path = other.cgi_path;
 	}
 	return *this;
 }
@@ -115,3 +118,7 @@ const std::string &Location::getUploadDirectory() const
 {
 	return upload_directory;
 }
+void Location::setCgiExtension(const std::string &value) { cgi_extension = value; }
+void Location::setCgiPath(const std::string &value) { cgi_path = value; }
+const std::string &Location::getCgiExtension() const { return cgi_extension; }
+const std::string &Location::getCgiPath() const { return cgi_path; }

@@ -4,10 +4,11 @@ CXX = c++
 CXXFLAGS = -Wall -Wextra -Werror -std=c++98 -Iinclude
 
 SRCDIR = src
-SRC = main.cpp $(SRCDIR)/Server.cpp
+SRC = main.cpp $(SRCDIR)/Config.cpp $(SRCDIR)/ConfigParser.cpp $(SRCDIR)/ServerConfig.cpp $(SRCDIR)/Location.cpp
 
 OBJDIR = obj
 OBJ = $(addprefix $(OBJDIR)/,$(SRC:.cpp=.o))
+DEP = $(OBJ:.o=.d)
 
 all: $(NAME)
 
@@ -16,7 +17,7 @@ $(NAME): $(OBJ)
 
 $(OBJDIR)/%.o: %.cpp
 	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
 
 clean:
 	rm -rf $(OBJDIR)
@@ -25,5 +26,7 @@ fclean: clean
 	rm -f $(NAME)
 
 re: fclean all
+
+-include $(DEP)
 
 .PHONY: all clean fclean re
