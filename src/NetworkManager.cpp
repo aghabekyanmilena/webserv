@@ -3,6 +3,7 @@
 #include <ctime>
 #include <iostream>
 #include <signal.h>
+#include <stdexcept>
 
 NetworkManager::NetworkManager()
     : _servers(), _clients(), _pollFds(), _connectionTimeout(30)
@@ -18,13 +19,28 @@ NetworkManager::~NetworkManager()
 
 void NetworkManager::addServer(const std::string& host, int port)
 {
-    try
+    ServerConfig config;
+    config.setHost(host);
+    config.addListenPort(port);
+    addServer(config);
+}
+
+void NetworkManager::addServer(const ServerConfig& config)
+{
+    // Register all configurations before opening sockets: vector growth must
+    // never copy and destroy a ServerSocket owning an active descriptor.
+    for (std::size_t i = 0; i < _servers.size(); ++i)
+        if (_servers[i].getFd() != -1)
+            throw std::runtime_error("Add server configurations before initialization");
+
+    const std::vector<int>& ports = config.getListenPorts();
+    if (ports.empty())
+        throw std::runtime_error("Server configuration requires a listen port");
+    for (std::size_t i = 0; i < ports.size(); ++i)
     {
-        _servers.push_back(ServerSocket(host, port));
-    }
-    catch (...)
-    {
-        std::cerr << "Unable to store listening socket configuration" << std::endl;
+        if (ports[i] < 1 || ports[i] > 65535)
+            throw std::runtime_error("Invalid configured listen port");
+        _servers.push_back(ServerSocket(config, ports[i]));
     }
 }
 
@@ -191,7 +207,7 @@ void NetworkManager::handleNewConnection(ServerSocket& server)
     if (clientFd == -1)
         return;
 
-    addClient(clientFd);
+    addClient(clientFd, server.getConfig());
 }
 
 void NetworkManager::handleClientRead(int clientFd)
@@ -218,6 +234,11 @@ void NetworkManager::handleClientWrite(int clientFd)
 
 void NetworkManager::addClient(int clientFd)
 {
+    addClient(clientFd, ServerConfig());
+}
+
+void NetworkManager::addClient(int clientFd, const ServerConfig& config)
+{
     if (clientFd < 0 || _clients.find(clientFd) != _clients.end())
     {
         if (clientFd >= 0 && _clients.find(clientFd) == _clients.end())
@@ -227,7 +248,7 @@ void NetworkManager::addClient(int clientFd)
 
     try
     {
-        _clients.insert(std::make_pair(clientFd, Client(clientFd)));
+        _clients.insert(std::make_pair(clientFd, Client(clientFd, config)));
     }
     catch (...)
     {
@@ -269,6 +290,14 @@ void NetworkManager::checkTimeouts()
     {
         removeClient(*it);
     }
+}
+
+const ServerConfig* NetworkManager::getClientConfig(int clientFd) const
+{
+    std::map<int, Client>::const_iterator it = _clients.find(clientFd);
+    if (it == _clients.end())
+        return NULL;
+    return &it->second.getConfig();
 }
 
 std::string NetworkManager::receiveRequest(int clientFd)

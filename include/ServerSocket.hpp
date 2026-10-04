@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include "ServerConfig.hpp"
 
 class ServerSocket
 {
@@ -14,10 +15,12 @@ private:
     int         _fd;
     std::string _host;
     int         _port;
+    ServerConfig _config;
 
     struct sockaddr_in create_addr() const;
 public:
     ServerSocket(const std::string& host, int port);
+    ServerSocket(const ServerConfig& config, int port);
     ~ServerSocket();
 
     // Setup
@@ -29,6 +32,7 @@ public:
     int acceptClient();
 
     // Getters
+    const ServerConfig& getConfig() const;
     int getFd() const;
     int getPort() const;
     const std::string& getHost() const;

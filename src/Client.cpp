@@ -5,6 +5,18 @@
 
 Client::Client(int fd)
     : _fd(fd),
+      _config(),
+      _readBuffer(),
+      _writeBuffer(),
+      _lastActivity(std::time(NULL)),
+      _responsePending(false),
+      _closed(false)
+{
+}
+
+Client::Client(int fd, const ServerConfig& config)
+    : _fd(fd),
+      _config(config),
       _readBuffer(),
       _writeBuffer(),
       _lastActivity(std::time(NULL)),
@@ -20,6 +32,11 @@ Client::~Client()
      * Client objects are stored by value in std::map, so closing here would
      * make temporary/copy destruction able to close a live descriptor.
      */
+}
+
+const ServerConfig& Client::getConfig() const
+{
+    return _config;
 }
 
 int Client::getFd() const

@@ -24,6 +24,7 @@ public:
 
     // Server/listener management
     void addServer(const std::string& host, int port);
+    void addServer(const ServerConfig& config);
 
     void initializeServers();
 
@@ -43,12 +44,15 @@ public:
 
     // Client management
     void addClient(int clientFd);
+    void addClient(int clientFd, const ServerConfig& config);
     void removeClient(int clientFd);
 
     // Timeout handling
     void checkTimeouts();
 
     // Interface toward HTTP/application layer
+    // Valid until this client is removed; NULL for an unknown client.
+    const ServerConfig* getClientConfig(int clientFd) const;
     std::string receiveRequest(int clientFd);
     void sendResponse(int clientFd, const std::string& response);
 

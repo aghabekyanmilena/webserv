@@ -3,11 +3,13 @@
 #include <string>
 #include <ctime>
 #include <iostream>
+#include "ServerConfig.hpp"
 
 class Client
 {
 private:
     int         _fd;
+    ServerConfig _config;
 
     std::string _readBuffer;
     std::string _writeBuffer;
@@ -19,10 +21,12 @@ private:
 
 public:
     Client(int fd);
+    Client(int fd, const ServerConfig& config);
     ~Client();
 
     // Identification
     int getFd() const;
+    const ServerConfig& getConfig() const;
 
     // Receiving
     bool receiveData();

@@ -3,48 +3,52 @@
 #include <fcntl.h>
 #include <sstream>
 
-namespace
+static bool parseIPv4Address(const std::string& host, unsigned long& address)
 {
-    bool parseIPv4Address(const std::string& host, unsigned long& address)
+    if (host.empty() || host == "*" || host == "0.0.0.0")
     {
-        if (host.empty() || host == "*" || host == "0.0.0.0")
-        {
-            address = INADDR_ANY;
-            return true;
-        }
-
-        std::istringstream stream(host);
-        unsigned int octet1;
-        unsigned int octet2;
-        unsigned int octet3;
-        unsigned int octet4;
-        char dot1;
-        char dot2;
-        char dot3;
-
-        if (!(stream >> octet1 >> dot1 >> octet2 >> dot2 >> octet3 >> dot3 >> octet4))
-            return false;
-
-        if (dot1 != '.' || dot2 != '.' || dot3 != '.')
-            return false;
-
-        if (octet1 > 255 || octet2 > 255 || octet3 > 255 || octet4 > 255)
-            return false;
-
-        stream >> std::ws;
-        if (!stream.eof())
-            return false;
-
-        address = (static_cast<unsigned long>(octet1) << 24)
-                | (static_cast<unsigned long>(octet2) << 16)
-                | (static_cast<unsigned long>(octet3) << 8)
-                | static_cast<unsigned long>(octet4);
+        address = INADDR_ANY;
         return true;
     }
+
+    std::istringstream stream(host);
+    unsigned int octet1;
+    unsigned int octet2;
+    unsigned int octet3;
+    unsigned int octet4;
+    char dot1;
+    char dot2;
+    char dot3;
+
+    if (!(stream >> octet1 >> dot1 >> octet2 >> dot2 >> octet3 >> dot3 >> octet4))
+        return false;
+
+    if (dot1 != '.' || dot2 != '.' || dot3 != '.')
+        return false;
+
+    if (octet1 > 255 || octet2 > 255 || octet3 > 255 || octet4 > 255)
+        return false;
+
+    stream >> std::ws;
+    if (!stream.eof())
+        return false;
+
+    address = (static_cast<unsigned long>(octet1) << 24)
+            | (static_cast<unsigned long>(octet2) << 16)
+            | (static_cast<unsigned long>(octet3) << 8)
+            | static_cast<unsigned long>(octet4);
+    return true;
 }
 
 ServerSocket::ServerSocket(const std::string& host, int port)
-    : _fd(-1), _host(host), _port(port)
+    : _fd(-1), _host(host), _port(port), _config()
+{
+    _config.setHost(host);
+    _config.addListenPort(port);
+}
+
+ServerSocket::ServerSocket(const ServerConfig& config, int port)
+    : _fd(-1), _host(config.getHost()), _port(port), _config(config)
 {
 }
 
@@ -62,6 +66,13 @@ bool ServerSocket::create()
     if (_fd == -1)
     {
         std::cerr << "socket() failed for " << _host << ":" << _port << std::endl;
+        return false;
+    }
+
+    if (fcntl(_fd, F_SETFL, O_NONBLOCK) == -1)
+    {
+        std::cerr << "Cannot make listening socket nonblocking" << std::endl;
+        closeSocket();
         return false;
     }
 
@@ -140,7 +151,18 @@ int ServerSocket::acceptClient()
     if (clientFd == -1)
         return -1;
 
+    if (fcntl(clientFd, F_SETFL, O_NONBLOCK) == -1)
+    {
+        close(clientFd);
+        return -1;
+    }
+
     return clientFd;
+}
+
+const ServerConfig& ServerSocket::getConfig() const
+{
+    return _config;
 }
 
 int ServerSocket::getFd() const
