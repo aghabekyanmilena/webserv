@@ -4,7 +4,8 @@ CXX = c++
 CXXFLAGS = -Wall -Wextra -Werror -std=c++98 -Iinclude
 
 SRCDIR = src
-SRC = main.cpp $(SRCDIR)/ServerSocket.cpp $(SRCDIR)/NetworkManager.cpp $(SRCDIR)/Client.cpp
+SRC = main.cpp $(SRCDIR)/Config.cpp $(SRCDIR)/ConfigParser.cpp $(SRCDIR)/Location.cpp $(SRCDIR)/ServerConfig.cpp\
+	$(SRCDIR)/ServerSocket.cpp $(SRCDIR)/NetworkManager.cpp $(SRCDIR)/Client.cpp
 
 OBJDIR = obj
 OBJ = $(addprefix $(OBJDIR)/,$(SRC:.cpp=.o))
