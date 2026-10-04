@@ -8,8 +8,7 @@
 #include <fstream>
 #include <sstream>
 
-static bool processRequest(const std::string& raw, const ServerConfig& config,
-                           std::string& serialized)
+static bool processRequest(const std::string& raw, const ServerConfig& config, std::string& serialized)
 {
     HttpRequest parsed;
     HttpParser parser;
