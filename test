@@ -1,0 +1,88 @@
+anush-tserunyan@anush-tserunyan-laptop:~$ ss -tn | grep 8080 // CHECK CONNECTIONS
+
+
+
+
+
+anush-tserunyan@anush-tserunyan-laptop:~$ nc 127.0.0.1 8081 // CONNECT
+
+
+
+
+
+
+anush-tserunyan@anush-tserunyan-laptop:~/webserv$ strace -f -e trace=socket,setsockopt,bind,listen,accept,recvfrom,sendto,poll,close ./webserv // ANALYZE
+close(3)                                = 0
+close(3)                                = 0
+close(3)                                = 0
+close(3)                                = 0
+close(3)                                = 0
+socket(AF_INET, SOCK_STREAM, IPPROTO_IP) = 3
+setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+bind(3, {sa_family=AF_INET, sin_port=htons(8080), sin_addr=inet_addr("0.0.0.0")}, 16) = 0
+listen(3, 4096)                         = 0
+Listening on 0.0.0.0:8080 (fd=3)
+socket(AF_INET, SOCK_STREAM, IPPROTO_IP) = 4
+setsockopt(4, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+bind(4, {sa_family=AF_INET, sin_port=htons(8081), sin_addr=inet_addr("0.0.0.0")}, 16) = 0
+listen(4, 4096)                         = 0
+Listening on 0.0.0.0:8081 (fd=4)
+Networking test started.
+Listening on ports 8080 and 8081.
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}], 2, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}], 2, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}], 2, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}], 2, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}], 2, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}], 2, 1000) = 1 ([{fd=4, revents=POLLIN}])
+accept(4, NULL, NULL)                   = 5
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}], 3, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}], 3, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}], 3, 1000) = 1 ([{fd=5, revents=POLLIN}])
+recvfrom(5, "dsfdsf\n", 8192, 0, NULL, NULL) = 7
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}], 3, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}], 3, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}], 3, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}], 3, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}], 3, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}], 3, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}], 3, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}], 3, 1000) = 1 ([{fd=3, revents=POLLIN}])
+accept(3, NULL, NULL)                   = 6
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}, {fd=6, events=POLLIN}], 4, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}, {fd=6, events=POLLIN}], 4, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}, {fd=6, events=POLLIN}], 4, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}, {fd=6, events=POLLIN}], 4, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}, {fd=6, events=POLLIN}], 4, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}, {fd=6, events=POLLIN}], 4, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}, {fd=6, events=POLLIN}], 4, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}, {fd=6, events=POLLIN}], 4, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}, {fd=6, events=POLLIN}], 4, 1000) = 1 ([{fd=6, revents=POLLIN}])
+recvfrom(6, "", 8192, 0, NULL, NULL)    = 0
+close(6)                                = 0
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}], 3, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}], 3, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}], 3, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}], 3, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}], 3, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}], 3, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}], 3, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}], 3, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}], 3, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}], 3, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}], 3, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}], 3, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}], 3, 1000) = 1 ([{fd=3, revents=POLLIN}])
+accept(3, NULL, NULL)                   = 6
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=5, events=POLLIN}, {fd=6, events=POLLIN}], 4, 1000) = 0 (Timeout)
+close(5)                                = 0
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=6, events=POLLIN}], 3, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=6, events=POLLIN}], 3, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=6, events=POLLIN}], 3, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=6, events=POLLIN}], 3, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=6, events=POLLIN}], 3, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=6, events=POLLIN}], 3, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=6, events=POLLIN}], 3, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=6, events=POLLIN}], 3, 1000) = 0 (Timeout)
+poll([{fd=3, events=POLLIN}, {fd=4, events=POLLIN}, {fd=6, events=POLLIN}], 3, 1000^Cstrace: Process 41195 detached
+ <detached ...>

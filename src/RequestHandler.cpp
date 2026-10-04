@@ -4,6 +4,7 @@
 #include <sys/stat.h>
 #include <cstddef>
 #include <dirent.h>
+#include <cstdio>
 
 
 bool RequestHandler::isLocationMatch(const std::string& uri, const std::string& locationPath) const
@@ -20,18 +21,18 @@ bool RequestHandler::isLocationMatch(const std::string& uri, const std::string& 
     return (uri[locationPath.size()] == '/');
 }
 
-const LocationConfig* RequestHandler::findLocation(const std::string& uri, const ServerConfig& serverConfig) const
+const Location* RequestHandler::findLocation(const std::string& uri, const ServerConfig& serverConfig) const
 {
-    const LocationConfig* bestMatch = NULL;
+    const Location* bestMatch = NULL;
     std::size_t bestLength = 0;
 
-    for (std::size_t i = 0; i < serverConfig.locations.size(); ++i)
+    for (std::size_t i = 0; i < serverConfig.getLocations().size(); ++i)
     {
-        const LocationConfig& location = serverConfig.locations[i];
-        if (isLocationMatch(uri, location.path) && location.path.size() >= bestLength)
+        const Location& location = serverConfig.getLocations()[i];
+        if (isLocationMatch(uri, location.getPath()) && location.getPath().size() >= bestLength)
         {
             bestMatch = &location;
-            bestLength = location.path.size();
+            bestLength = location.getPath().size();
         }
     }
     return bestMatch;
@@ -42,25 +43,25 @@ bool RequestHandler::isSupportedMethod(const std::string& method) const
     return (method == "GET" || method == "POST" || method == "DELETE");
 }
 
-bool RequestHandler::isMethodAllowed(const std::string& method, const LocationConfig& location) const
+bool RequestHandler::isMethodAllowed(const std::string& method, const Location& location) const
 {
-    for (std::size_t i = 0; i < location.allowedMethods.size(); ++i)
+    for (std::size_t i = 0; i < location.getAllowedMethods().size(); ++i)
     {
-        if (location.allowedMethods[i] == method)
+        if (location.getAllowedMethods()[i] == method)
             return true;
     }
     return false;
 }
 
-std::string RequestHandler::buildAllowHeader(const LocationConfig& location) const
+std::string RequestHandler::buildAllowHeader(const Location& location) const
 {
     std::string result;
 
-    for (std::size_t i = 0; i < location.allowedMethods.size(); ++i)
+    for (std::size_t i = 0; i < location.getAllowedMethods().size(); ++i)
     {
         if (i != 0)
             result += ", ";
-        result += location.allowedMethods[i];
+        result += location.getAllowedMethods()[i];
     }
     return result;
 }
@@ -77,7 +78,7 @@ HTTPResponse RequestHandler::makeErrorResponse(int statusCode, const std::string
 
 HTTPResponse RequestHandler::handleRequest(const HTTPRequest& request, const ServerConfig& serverConfig)
 {
-    const LocationConfig* location = findLocation(request.uri, serverConfig); // serverConfigi mejic gtnuma clineti uri-y
+    const Location* location = findLocation(request.uri, serverConfig); // serverConfigi mejic gtnuma clineti uri-y
     if (location == NULL)
         return makeErrorResponse(404, "404 Not Found");
     if (!isSupportedMethod(request.method)) // checka anum methody ka te che
@@ -88,11 +89,11 @@ HTTPResponse RequestHandler::handleRequest(const HTTPRequest& request, const Ser
         response.headers["Allow"] = buildAllowHeader(*location); // asuma voronqa allow tvac
         return response;
     }
-    if (location->hasRedirect) // ardyoq locationy redirecta?
+    if (location->hasRedirect()) // ardyoq locationy redirecta?
     {
         HTTPResponse response;
-        response.statusCode = location->redirectCode;
-        response.headers["Location"] = location->redirectTarget; // asuma clientin ur piti gna
+        response.statusCode = location->getRedirectCode();
+        response.headers["Location"] = location->getRedirectTarget(); // asuma clientin ur piti gna
         return response;
     }
     if (request.method == "GET")
@@ -104,7 +105,7 @@ HTTPResponse RequestHandler::handleRequest(const HTTPRequest& request, const Ser
     return makeErrorResponse(500, "500 Internal Server Error");
 }
 
-HTTPResponse RequestHandler::handleGet(const HTTPRequest& request, const LocationConfig& location)
+HTTPResponse RequestHandler::handleGet(const HTTPRequest& request, const Location& location)
 {
     if (!isPathSafe(request.uri))
         return makeErrorResponse(403, "403 Forbidden");
@@ -125,9 +126,9 @@ HTTPResponse RequestHandler::handleGet(const HTTPRequest& request, const Locatio
         }
         if (!filePath.empty() && filePath[filePath.size() - 1] != '/')
             filePath += "/";
-        if (!location.index.empty())
+        if (!location.getIndex().empty())
         {
-            std::string indexPath = filePath + location.index;
+            std::string indexPath = filePath + location.getIndex();
             struct stat indexInfo;
 
             if (stat(indexPath.c_str(), &indexInfo) == 0 && S_ISREG(indexInfo.st_mode))
@@ -135,12 +136,12 @@ HTTPResponse RequestHandler::handleGet(const HTTPRequest& request, const Locatio
                 filePath = indexPath;
                 fileInfo = indexInfo;
             }
-            else if (!location.autoindex)
+            else if (!location.getAutoindex())
                 return makeErrorResponse(403, "403 Forbidden");
         }
-        else if (!location.autoindex)
+        else if (!location.getAutoindex())
             return makeErrorResponse(403, "403 Forbidden");
-        if (S_ISDIR(fileInfo.st_mode) && location.autoindex)
+        if (S_ISDIR(fileInfo.st_mode) && location.getAutoindex())
         {
             DIR* directory = opendir(filePath.c_str());
             if (directory == NULL)
@@ -213,15 +214,18 @@ HTTPResponse RequestHandler::handleGet(const HTTPRequest& request, const Locatio
     return response;
 }
 
-HTTPResponse RequestHandler::handlePost(const HTTPRequest& request, const LocationConfig& location)
+HTTPResponse RequestHandler::handlePost(const HTTPRequest& request, const Location& location)
 {
     if (!isPathSafe(request.uri))
         return makeErrorResponse(403, "403 Forbidden");
 
-    if (request.uri == location.path || request.uri == location.path + "/")
+    if (request.uri == location.getPath() || request.uri == location.getPath() + "/")
         return makeErrorResponse(400, "400 Bad Request");
 
-    std::string filePath = location.uploadDirectory + request.uri.substr(location.path.size());
+    if (location.getUploadDirectory().empty())
+        return makeErrorResponse(403, "403 Forbidden");
+
+    std::string filePath = location.getUploadDirectory() + request.uri.substr(location.getPath().size());
     std::ofstream file(filePath.c_str(), std::ios::out | std::ios::binary);
 
     if (!file.is_open())
@@ -229,6 +233,8 @@ HTTPResponse RequestHandler::handlePost(const HTTPRequest& request, const Locati
 
     file << request.body;
     file.close();
+    if (!file)
+        return makeErrorResponse(500, "500 Internal Server Error");
 
     HTTPResponse response;
     response.statusCode = 201;
@@ -237,8 +243,10 @@ HTTPResponse RequestHandler::handlePost(const HTTPRequest& request, const Locati
     return response;
 }
 
-HTTPResponse RequestHandler::handleDelete(const HTTPRequest& request, const LocationConfig& location)
+HTTPResponse RequestHandler::handleDelete(const HTTPRequest& request, const Location& location)
 {
+    if (!isPathSafe(request.uri))
+        return makeErrorResponse(403, "403 Forbidden");
     std::string filePath = buildFilePath(request.uri, location);
 
     struct stat fileInfo;
@@ -286,15 +294,15 @@ std::string RequestHandler::getMimeType(const std::string& filePath) const
     return "application/octet-stream";
 }
 
-std::string RequestHandler::buildFilePath(const std::string& uri, const LocationConfig& location) const
+std::string RequestHandler::buildFilePath(const std::string& uri, const Location& location) const
 {
     std::string relativePath = uri;
 
-    if (location.path != "/" && relativePath.compare(0, location.path.size(), location.path) == 0)
-        relativePath = relativePath.substr(location.path.size());
+    if (location.getPath() != "/" && relativePath.compare(0, location.getPath().size(), location.getPath()) == 0)
+        relativePath = relativePath.substr(location.getPath().size());
     if (relativePath.empty())
         relativePath = "/";
-    return location.root + relativePath;
+    return location.getRoot() + relativePath;
 }
 
 bool RequestHandler::isPathSafe(const std::string& path) const
