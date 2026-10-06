@@ -2,6 +2,8 @@
 
 #include <fcntl.h>
 #include <sstream>
+#include <cerrno>
+#include <cstring>
 
 static bool parseIPv4Address(const std::string& host, unsigned long& address)
 {
@@ -120,7 +122,8 @@ bool ServerSocket::bindSocket()
     if (bind(_fd, reinterpret_cast<const struct sockaddr*>(&address),
              sizeof(address)) == -1)
     {
-        std::cerr << "bind() failed for " << _host << ":" << _port << std::endl;
+        std::cerr << "bind() failed for " << _host << ":" << _port
+                  << ": " << std::strerror(errno) << std::endl;
         return false;
     }
 
@@ -134,7 +137,8 @@ bool ServerSocket::listenSocket()
 
     if (listen(_fd, SOMAXCONN) == -1)
     {
-        std::cerr << "listen() failed for " << _host << ":" << _port << std::endl;
+        std::cerr << "listen() failed for " << _host << ":" << _port
+                  << ": " << std::strerror(errno) << std::endl;
         return false;
     }
 

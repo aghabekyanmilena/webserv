@@ -5,6 +5,7 @@
 
 Client::Client(int fd)
     : _fd(fd),
+      _listenPort(-1),
       _config(),
       _readBuffer(),
       _writeBuffer(),
@@ -16,6 +17,19 @@ Client::Client(int fd)
 
 Client::Client(int fd, const ServerConfig& config)
     : _fd(fd),
+      _listenPort(-1),
+      _config(config),
+      _readBuffer(),
+      _writeBuffer(),
+      _lastActivity(std::time(NULL)),
+      _responsePending(false),
+      _closed(false)
+{
+}
+
+Client::Client(int fd, const ServerConfig& config, int listenPort)
+    : _fd(fd),
+      _listenPort(listenPort),
       _config(config),
       _readBuffer(),
       _writeBuffer(),
@@ -42,6 +56,16 @@ const ServerConfig& Client::getConfig() const
 int Client::getFd() const
 {
     return _fd;
+}
+
+int Client::getListenPort() const
+{
+    return _listenPort;
+}
+
+void Client::setConfig(const ServerConfig& config)
+{
+    _config = config;
 }
 
 bool Client::receiveData()

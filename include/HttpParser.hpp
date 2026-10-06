@@ -12,6 +12,7 @@ public:
 		INCOMPLETE,
 		COMPLETE,
 		ERROR,
+		HEADER_TOO_LARGE,
 		TOO_LARGE
 	};
 

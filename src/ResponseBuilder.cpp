@@ -2,6 +2,20 @@
 #include <sstream>
 #include <cctype>
 #include <map>
+#include <fstream>
+#include <ctime>
+
+static std::string httpDate()
+{
+	char buffer[64];
+	std::time_t now = std::time(NULL);
+	std::tm *gmt = std::gmtime(&now);
+	if (gmt == NULL)
+		return std::string();
+	if (std::strftime(buffer, sizeof(buffer), "%a, %d %b %Y %H:%M:%S GMT", gmt) == 0)
+		return std::string();
+	return std::string(buffer);
+}
 
 std::string ResponseBuilder::reasonPhrase(int statusCode)
 {
@@ -19,7 +33,9 @@ std::string ResponseBuilder::reasonPhrase(int statusCode)
 		case 403: return "Forbidden";
 		case 404: return "Not Found";
 		case 405: return "Method Not Allowed";
+		case 408: return "Request Timeout";
 		case 413: return "Payload Too Large";
+		case 431: return "Request Header Fields Too Large";
 		case 500: return "Internal Server Error";
 		case 501: return "Not Implemented";
 		case 502: return "Bad Gateway";
@@ -51,25 +67,34 @@ std::string ResponseBuilder::serialize(const HttpResponse &response)
 
 	const std::map<std::string, std::string> &headers = response.getHeaders();
 	std::map<std::string, std::string>::const_iterator it;
-	bool hasContentLength = false;
+	bool hasDate = false;
+	bool hasServer = false;
 
 	for (it = headers.begin(); it != headers.end(); ++it)
 	{
 		std::string name = it->first;
 		for (std::size_t i = 0; i < name.size(); ++i)
 			name[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(name[i])));
+
 		if (name == "content-length")
-		{
-			hasContentLength = true;
 			continue;
-		}
-		output << it->first
-			   << ": "
-			   << it->second
-			   << "\r\n";
+		if (name == "date")
+			hasDate = true;
+		if (name == "server")
+			hasServer = true;
+
+		output << it->first << ": " << it->second << "\r\n";
 	}
 
-	(void)hasContentLength;
+	if (!hasDate)
+	{
+		const std::string date = httpDate();
+		if (!date.empty())
+			output << "Date: " << date << "\r\n";
+	}
+	if (!hasServer)
+		output << "Server: webserv/1.0\r\n";
+
 	output << "Content-Length: " << response.getBody().size() << "\r\n";
 	output << "\r\n";
 	output << response.getBody();
@@ -80,7 +105,6 @@ std::string ResponseBuilder::serialize(const HttpResponse &response)
 HttpResponse ResponseBuilder::makeError(int statusCode, const std::string &body)
 {
 	HttpResponse response;
-
 	response.setStatusCode(statusCode);
 	response.setReasonPhrase(reasonPhrase(statusCode));
 	if (body.empty() && statusCode >= 400)
@@ -90,6 +114,29 @@ HttpResponse ResponseBuilder::makeError(int statusCode, const std::string &body)
 	}
 	else
 		response.setBody(body);
+	return response;
+}
 
+HttpResponse ResponseBuilder::makeError(int statusCode, const std::string &body,
+										const ServerConfig& config)
+{
+	HttpResponse response = makeError(statusCode, body);
+
+	if (statusCode >= 400)
+	{
+		const std::map<int, std::string> &pages = config.getErrorPages();
+		std::map<int, std::string>::const_iterator page = pages.find(statusCode);
+		if (page != pages.end())
+		{
+			std::ifstream file(page->second.c_str(), std::ios::in | std::ios::binary);
+			if (file)
+			{
+				std::ostringstream customBody;
+				customBody << file.rdbuf();
+				response.setBody(customBody.str());
+				response.setHeader("Content-Type", "text/html");
+			}
+		}
+	}
 	return response;
 }

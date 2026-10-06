@@ -1,15 +1,12 @@
-#include "NetworkManager.hpp"
-#include "Config.hpp"
-#include "HttpParser.hpp"
-#include "RequestHandler.hpp"
-#include "ResponseBuilder.hpp"
+#include "include/NetworkManager.hpp"
+#include "include/Config.hpp"
+#include "include/HttpParser.hpp"
+#include "include/RequestHandler.hpp"
+#include "include/ResponseBuilder.hpp"
 #include <iostream>
 #include <exception>
-#include <fstream>
-#include <sstream>
 
-static bool processRequest(const std::string &raw, const ServerConfig &config,
-						   std::string &serialized)
+static bool processRequest(const std::string &raw, const ServerConfig &config, std::string &serialized)
 {
 	HttpRequest parsed;
 	HttpParser parser;
@@ -20,9 +17,11 @@ static bool processRequest(const std::string &raw, const ServerConfig &config,
 	if (result == HttpParser::INCOMPLETE)
 		return false;
 
-	if (result == HttpParser::TOO_LARGE
-		|| parsed.getContentLength() > maxBody
-		|| parsed.getBody().size() > maxBody)
+	if (result == HttpParser::ParseResult::HEADER_TOO_LARGE)
+		response.statusCode = 431;
+	else if (result == HttpParser::TOO_LARGE
+		|| (maxBody != 0 && parsed.getContentLength() > maxBody)
+		|| (maxBody != 0 && parsed.getBody().size() > maxBody))
 		response.statusCode = 413;
 	else if (result == HttpParser::ERROR)
 		response.statusCode = 400;
@@ -37,23 +36,8 @@ static bool processRequest(const std::string &raw, const ServerConfig &config,
 		RequestHandler handler;
 		response = handler.handleRequest(request, config);
 	}
-	if (response.statusCode >= 400)
-	{
-		const std::map<int, std::string> &pages = config.getErrorPages();
-		std::map<int, std::string>::const_iterator page = pages.find(response.statusCode);
-		if (page != pages.end())
-		{
-			std::ifstream file(page->second.c_str(), std::ios::in | std::ios::binary);
-			if (file)
-			{
-				std::ostringstream body;
-				body << file.rdbuf();
-				response.body = body.str();
-				response.headers["Content-Type"] = "text/html";
-			}
-		}
-	}
-	HttpResponse formatted = ResponseBuilder::makeError(response.statusCode, response.body);
+
+	HttpResponse formatted = ResponseBuilder::makeError(response.statusCode, response.body, config);
 	for (std::map<std::string, std::string>::const_iterator it = response.headers.begin();
 		 it != response.headers.end(); ++it)
 		formatted.setHeader(it->first, it->second);

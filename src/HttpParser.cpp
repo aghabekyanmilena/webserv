@@ -95,11 +95,11 @@ HttpParser::parse(const std::string &raw, HttpRequest &request, std::size_t maxB
 	if (headerEnd == std::string::npos)
 	{
 		if (raw.size() > MAX_HEADER_SIZE)
-			return ERROR;
+			return HEADER_TOO_LARGE;
 		return INCOMPLETE;
 	}
 	if (headerEnd > MAX_HEADER_SIZE)
-		return ERROR;
+		return HEADER_TOO_LARGE;
 
 	std::string headerPart = raw.substr(0, headerEnd);
 	std::size_t firstLineEnd = headerPart.find("\r\n");
@@ -116,6 +116,10 @@ HttpParser::parse(const std::string &raw, HttpRequest &request, std::size_t maxB
 		firstLineEnd == headerPart.size() ? "" : headerPart.substr(firstLineEnd + 2);
 
 	if (!parseHeaders(headers, request))
+		return ERROR;
+
+	if (request.getVersion() == "HTTP/1.1"
+		&& request.getHeaders().find("host") == request.getHeaders().end())
 		return ERROR;
 
 	std::string body = raw.substr(headerEnd + 4);

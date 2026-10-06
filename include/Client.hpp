@@ -2,53 +2,44 @@
 
 #include <string>
 #include <ctime>
-#include <iostream>
 #include "ServerConfig.hpp"
 
 class Client
 {
 private:
-    int         _fd;
-    ServerConfig _config;
-
-    std::string _readBuffer;
-    std::string _writeBuffer;
-
-    std::time_t _lastActivity;
-
-    bool        _responsePending;
-    bool        _closed;
+	int          _fd;
+	int          _listenPort;
+	ServerConfig _config;
+	std::string  _readBuffer;
+	std::string  _writeBuffer;
+	std::time_t  _lastActivity;
+	bool         _responsePending;
+	bool         _closed;
 
 public:
-    Client(int fd);
-    Client(int fd, const ServerConfig& config);
-    ~Client();
+	Client(int fd);
+	Client(int fd, const ServerConfig& config);
+	Client(int fd, const ServerConfig& config, int listenPort);
+	~Client();
 
-    // Identification
-    int getFd() const;
-    const ServerConfig& getConfig() const;
+	int getFd() const;
+	int getListenPort() const;
+	const ServerConfig& getConfig() const;
+	void setConfig(const ServerConfig& config);
 
-    // Receiving
-    bool receiveData();
+	bool receiveData();
+	const std::string& getReadBuffer() const;
+	void clearReadBuffer();
 
-    const std::string& getReadBuffer() const;
-    void clearReadBuffer();
+	void setResponse(const std::string& response);
+	bool sendData();
+	bool hasPendingResponse() const;
 
-    // Sending
-    void setResponse(const std::string& response);
-    bool sendData();
+	void updateActivity();
+	std::time_t getLastActivity() const;
+	bool hasTimedOut(std::time_t now, int timeoutSeconds) const;
 
-    bool hasPendingResponse() const;
-
-    // Timeout
-    void updateActivity();
-    std::time_t getLastActivity() const;
-    bool hasTimedOut(std::time_t now, int timeoutSeconds) const;
-
-    // State
-    bool isClosed() const;
-    void markClosed();
-
-    // Cleanup
-    void closeConnection();
+	bool isClosed() const;
+	void markClosed();
+	void closeConnection();
 };
