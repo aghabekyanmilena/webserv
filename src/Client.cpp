@@ -6,7 +6,7 @@
 #include <limits>
 #include <cctype>
 
-namespace { const std::size_t MAX_HEADER_SIZE = 8192; }
+static const std::size_t MAX_HEADER_SIZE = 8192;
 
 Client::Client(int fd)
     : _fd(fd),

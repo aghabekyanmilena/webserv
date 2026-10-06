@@ -34,6 +34,19 @@ Stop it with Ctrl-C. Sample CGI configurations require `/usr/bin/python3`;
 adjust `cgi_path` if your interpreter is elsewhere. Paths in sample configurations
 are relative to the repository directory.
 
+`index` can be set in a server block, for example `index home.html;`.
+Locations inherit the server's index unless they specify their own `index`.
+The default is `index.html`; inheritance works regardless of directive order.
+The filename is resolved inside the requested directory under its location root.
+CGI directory indices execute through the same process path as explicit script
+requests, and receive their effective script URI in `SCRIPT_NAME`.
+
+On Linux, file access uses `O_PATH`, `O_NOFOLLOW`, and `/proc/self/fd` to pin
+directories and files before using them. Symlinks below a configured root are
+rejected, including links pointing elsewhere inside that root. The configured
+root itself may be a symlink. This protection also applies to upload parents,
+DELETE, directory indices, and CGI scripts. Linux procfs must be mounted.
+
 Open `http://127.0.0.1:8080/upload.html` for upload, DELETE, and CGI demonstrations.
 Other routes include `/files/` (directory listing), `/old-page` (redirect),
 `/cgi-bin/hello.py?name=webserv`, and `/missing` (custom 404). Uploads are stored
@@ -48,8 +61,19 @@ curl -i -X DELETE http://127.0.0.1:8080/upload/example.txt
 ```
 
 `make clean` removes objects and dependencies; `make fclean` also removes the
-executable; `make re` rebuilds from scratch. Tests use Python's standard library
-and the C++98 compiler:
+executable; `make re` rebuilds from scratch. The focused Bash/C++ regression
+checks require curl, nc, rg, and a C++98 compiler:
+
+```sh
+bash tests/manual_bug_checks.sh
+# Choose another unused local port if necessary:
+WEBSERV_TEST_PORT=19008 bash tests/manual_bug_checks.sh
+```
+
+These checks include symlink rejection, replaced path components, CGI indices,
+malformed requests, upload/DELETE, PDF headers, and 300 concurrent GETs. Fixtures
+and response captures stay in the printed temporary directory. Existing Python
+suites are also available:
 
 ```sh
 make re
@@ -71,7 +95,7 @@ The live CGI suite also requires `curl`. The suites cover multiport serving, 300
 configuration, and SIGINT. CGI checks cover query strings, chunk decoding,
 relative file access, EOF output, crashes, timeouts, and static requests during
 a hanging job. See [docs/integration-review.md](docs/integration-review.md) for
-the file-access review and remaining application concerns.
+the file-access design and integration review.
 
 ## Team ownership
 
@@ -99,7 +123,9 @@ AI assistance was used in this revision to inspect the subject and code,
 implement network exception guards and emergency responses, connect the existing
 CGI process to the poll loop, adjust Linux socket handling and the main handoff,
 add regression tests, and update documentation and the demonstration page.
-It also assisted the documented symlink-access review. The existing CGI process,
-HTTP/configuration parsers, and application handlers were reused. The team must
+It also assisted the symlink-access review and fix, CGI directory-index handoff,
+HTTP request validation, response framing, and MIME/creation headers. The existing
+CGI process, HTTP/configuration parsers, and application handlers provided the
+base for these changes. The team must
 review and understand these changes before evaluation. This statement describes
 this revision's AI usage, not earlier work.

@@ -1,36 +1,36 @@
 #include "RequestResources.hpp"
 #include "MultipartUpload.hpp"
+#include "RootedPath.hpp"
 #include <fcntl.h>
 #include <unistd.h>
 #include <cerrno>
-#include <fstream>
 #include <sstream>
 #include <sys/stat.h>
 #include <dirent.h>
 #include <cstdio>
+#include <cctype>
 
-namespace
+class RequestResources::DirectoryGuard
 {
-    class DirectoryGuard
-    {
-        DIR* _directory;
-        DirectoryGuard(const DirectoryGuard&);
-        DirectoryGuard& operator=(const DirectoryGuard&);
-    public:
-        explicit DirectoryGuard(DIR* directory) : _directory(directory) {}
-        ~DirectoryGuard() { closedir(_directory); }
-    };
-}
+    DIR* _directory;
+    DirectoryGuard(const DirectoryGuard&);
+    DirectoryGuard& operator=(const DirectoryGuard&);
+public:
+    explicit DirectoryGuard(DIR* directory) : _directory(directory) {}
+    ~DirectoryGuard() { closedir(_directory); }
+};
 
 HTTPResponse RequestResources::handleGet(const HTTPRequest& request, const Location& location)
 {
     if (!isPathSafe(request.uri))
         return makeErrorResponse(403, "403 Forbidden");
-    std::string filePath = buildFilePath(request.uri, location);
-
+    RootedPath path;
+    int status = 500;
     struct stat fileInfo;
-    if (stat(filePath.c_str(), &fileInfo) != 0)
-        return makeErrorResponse(404, "404 Not Found");
+    if (!path.resolve(location.getRoot(), getRelativePath(request.uri, location), status)
+        || !path.inspect(fileInfo, status))
+        return makeErrorResponse(status, "File access denied or unavailable");
+    std::string filePath = buildFilePath(request.uri, location);
 
     if (S_ISDIR(fileInfo.st_mode))
     {
@@ -41,18 +41,19 @@ HTTPResponse RequestResources::handleGet(const HTTPRequest& request, const Locat
             response.headers["Location"] = encodeUriPath(request.uri) + "/";
             return response;
         }
-        if (!filePath.empty() && filePath[filePath.size() - 1] != '/')
-            filePath += "/";
         if (!location.getIndex().empty())
         {
-            std::string indexPath = filePath + location.getIndex();
+            RootedPath indexPath;
             struct stat indexInfo;
-
-            if (stat(indexPath.c_str(), &indexInfo) == 0 && S_ISREG(indexInfo.st_mode))
+            if (indexPath.resolve(RootedPath::descriptorPath(path.targetFd()), location.getIndex(), status)
+                && indexPath.inspect(indexInfo, status) && S_ISREG(indexInfo.st_mode))
             {
-                filePath = indexPath;
+                path = indexPath;
+                filePath = joinPath(filePath, location.getIndex());
                 fileInfo = indexInfo;
             }
+            else if (status == 403 || status == 500)
+                return makeErrorResponse(status, "Index access denied or unavailable");
             else if (!location.getAutoindex())
                 return makeErrorResponse(403, "403 Forbidden");
         }
@@ -60,7 +61,7 @@ HTTPResponse RequestResources::handleGet(const HTTPRequest& request, const Locat
             return makeErrorResponse(403, "403 Forbidden");
         if (S_ISDIR(fileInfo.st_mode) && location.getAutoindex())
         {
-            DIR* directory = opendir(filePath.c_str());
+            DIR* directory = opendir(RootedPath::descriptorPath(path.targetFd()).c_str());
             if (directory == NULL)
                 return makeErrorResponse(403, "403 Forbidden");
             
@@ -86,12 +87,12 @@ HTTPResponse RequestResources::handleGet(const HTTPRequest& request, const Locat
                 if (name == "." || name == "..")
                     continue;
 
-                std::string entryPath = filePath + name;
+                const std::string entryPath = RootedPath::descriptorPath(path.targetFd()) + "/" + name;
+                OwnedFd entryFd(open(entryPath.c_str(), O_PATH | O_NOFOLLOW));
                 struct stat entryInfo;
-                bool isDirectory = false;
-
-                if (stat(entryPath.c_str(), &entryInfo) == 0 && S_ISDIR(entryInfo.st_mode))
-                    isDirectory = true;
+                if (entryFd.get() < 0 || stat(RootedPath::descriptorPath(entryFd.get()).c_str(), &entryInfo) != 0
+                    || S_ISLNK(entryInfo.st_mode)) continue;
+                const bool isDirectory = S_ISDIR(entryInfo.st_mode);
                 html << "        <li><a href=\"" << encodePathSegment(name);
                 if (isDirectory)
                     html << "/";
@@ -122,19 +123,21 @@ HTTPResponse RequestResources::handleGet(const HTTPRequest& request, const Locat
         filePath.compare(filePath.size() - extension.size(), extension.size(), extension) == 0)
         return makeErrorResponse(501, "501 CGI Integration Required");
 
-    std::ifstream file(filePath.c_str(), std::ios::in | std::ios::binary);
-    if (!file.is_open())
-        return makeErrorResponse(403, "403 Forbidden");
-
-    std::ostringstream content;
-    content << file.rdbuf();
-    if (file.bad())
-        return makeErrorResponse(500, "500 Internal Server Error");
-    file.close();
-
+    // Open the pinned inode rather than reopening a replaceable request pathname.
+    OwnedFd file(open(RootedPath::descriptorPath(path.targetFd()).c_str(), O_RDONLY | O_NONBLOCK));
+    if (file.get() < 0)
+        return makeErrorResponse(RootedPath::openErrorStatus(errno), "File access denied or unavailable");
     HTTPResponse response;
+    char buffer[8192];
+    for (;;)
+    {
+        // The inspected target is a regular disk file: poll readiness is exempt.
+        const ssize_t count = read(file.get(), buffer, sizeof(buffer));
+        if (count < 0) return makeErrorResponse(500, "500 Internal Server Error");
+        if (count == 0) break;
+        response.body.append(buffer, static_cast<std::size_t>(count));
+    }
     response.statusCode = 200;
-    response.body = content.str();
     response.headers["Content-Type"] = getMimeType(filePath);
     return response;
 }
@@ -164,16 +167,16 @@ HTTPResponse RequestResources::handlePost(const HTTPRequest& request, const Loca
     if (relativePath.empty() || relativePath[relativePath.size() - 1] == '/')
         return makeErrorResponse(400, "400 Bad Request");
 
-    const std::string filePath = joinPath(location.getUploadDirectory(), relativePath);
-    const std::size_t slash = filePath.rfind('/');
-    const std::string parent = slash == 0 ? "/" : filePath.substr(0, slash);
-    struct stat directoryInfo;
-    if (stat(parent.c_str(), &directoryInfo) != 0 || !S_ISDIR(directoryInfo.st_mode))
-        return makeErrorResponse(404, "404 Not Found");
-    if (access(parent.c_str(), W_OK) != 0)
+    RootedPath path;
+    int status = 500;
+    if (!path.resolve(location.getUploadDirectory(), relativePath, status))
+        return makeErrorResponse(status, "Upload path denied or unavailable");
+    const std::string filePath = path.entryPath();
+    if (access(RootedPath::descriptorPath(path.parentFd()).c_str(), W_OK) != 0)
         return makeErrorResponse(403, "403 Forbidden");
     // Exclusive creation avoids overwriting an existing file or following a final symlink.
-    const int fd = open(filePath.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0644);
+    OwnedFd file(open(filePath.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0644));
+    const int fd = file.get();
     if (fd < 0)
     {
         // errno is inspected only after open(), never after read()/write().
@@ -195,7 +198,7 @@ HTTPResponse RequestResources::handlePost(const HTTPRequest& request, const Loca
         if (result <= 0) { failed = true; break; }
         written += static_cast<std::size_t>(result);
     }
-    if (close(fd) != 0) failed = true;
+    if (close(file.release()) != 0) failed = true;
     if (failed)
     {
         std::remove(filePath.c_str());
@@ -205,6 +208,7 @@ HTTPResponse RequestResources::handlePost(const HTTPRequest& request, const Loca
     response.statusCode = 201;
     response.body = "File uploaded successfully";
     response.headers["Content-Type"] = "text/plain";
+    response.headers["Location"] = encodeUriPath(joinPath(location.getPath(), relativePath));
     return response;
 }
 
@@ -212,16 +216,18 @@ HTTPResponse RequestResources::handleDelete(const HTTPRequest& request, const Lo
 {
     if (!isPathSafe(request.uri))
         return makeErrorResponse(403, "403 Forbidden");
-    std::string filePath = buildFilePath(request.uri, location);
-
+    RootedPath path;
+    int status = 500;
     struct stat fileInfo;
-    if (stat(filePath.c_str(), &fileInfo) != 0)
-        return makeErrorResponse(404, "404 Not Found");
+    if (!path.resolve(location.getRoot(), getRelativePath(request.uri, location), status)
+        || !path.inspect(fileInfo, status))
+        return makeErrorResponse(status, "Delete path denied or unavailable");
 
     if (!S_ISREG(fileInfo.st_mode))
         return makeErrorResponse(403, "403 Forbidden");
 
-    if (std::remove(filePath.c_str()) != 0)
+    // remove never follows the final symlink, and the parent descriptor is pinned.
+    if (std::remove(path.entryPath().c_str()) != 0)
         return makeErrorResponse(500, "500 Internal Server Error");
 
     HTTPResponse response;
@@ -238,6 +244,8 @@ std::string RequestResources::getMimeType(const std::string& filePath) const
         return "application/octet-stream";
 
     std::string extension = filePath.substr(dot);
+    for (std::size_t i = 0; i < extension.size(); ++i)
+        extension[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(extension[i])));
 
     if (extension == ".html" || extension == ".htm")
         return "text/html";
@@ -255,6 +263,8 @@ std::string RequestResources::getMimeType(const std::string& filePath) const
         return "image/gif";
     if (extension == ".svg")
         return "image/svg+xml";
+    if (extension == ".pdf")
+        return "application/pdf";
 
     return "application/octet-stream";
 }

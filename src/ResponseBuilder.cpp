@@ -95,9 +95,13 @@ std::string ResponseBuilder::serialize(const HttpResponse &response)
 	if (!hasServer)
 		output << "Server: webserv/1.0\r\n";
 
-	output << "Content-Length: " << response.getBody().size() << "\r\n";
+	const int status = response.getStatusCode();
+	const bool hasContent = status >= 200 && status != 204 && status != 304;
+	if (hasContent)
+		output << "Content-Length: " << response.getBody().size() << "\r\n";
 	output << "\r\n";
-	output << response.getBody();
+	if (hasContent)
+		output << response.getBody();
 
 	return output.str();
 }

@@ -3,6 +3,121 @@
 #include <cctype>
 #include <vector>
 
+bool HttpParser::tokenChar(unsigned char c)
+{
+    return (c < 128 && std::isalnum(c)) ||
+        std::string("!#$%&'*+-.^_`|~").find(c) != std::string::npos;
+}
+
+bool HttpParser::regNameChar(unsigned char c)
+{
+    return (c < 128 && std::isalnum(c)) ||
+        std::string("-._~!$&'()*+,;=").find(c) != std::string::npos;
+}
+
+bool HttpParser::ipv4(const std::string& text)
+{
+    std::size_t start = 0;
+    int parts = 0;
+    while (start < text.size())
+    {
+        const std::size_t end = text.find('.', start);
+        const std::string part = text.substr(start, end == std::string::npos ? end : end - start);
+        if (part.empty() || part.size() > 3) return false;
+        unsigned int value = 0;
+        for (std::size_t i = 0; i < part.size(); ++i)
+        {
+            if (part[i] < '0' || part[i] > '9') return false;
+            value = value * 10 + part[i] - '0';
+        }
+        if (value > 255 || ++parts > 4) return false;
+        if (end == std::string::npos) return parts == 4;
+        start = end + 1;
+    }
+    return false;
+}
+
+bool HttpParser::ipLiteral(const std::string& text)
+{
+    if (text.empty()) return false;
+    if (text[0] == 'v' || text[0] == 'V')
+    {
+        const std::size_t dot = text.find('.');
+        if (dot == std::string::npos || dot < 2 || dot + 1 == text.size()) return false;
+        for (std::size_t i = 1; i < dot; ++i)
+            if (!std::isxdigit(static_cast<unsigned char>(text[i]))) return false;
+        for (std::size_t i = dot + 1; i < text.size(); ++i)
+            if (!regNameChar(text[i]) && text[i] != ':') return false;
+        return true;
+    }
+    const std::size_t compression = text.find("::");
+    if (text.find(":::") != std::string::npos ||
+        (compression != std::string::npos && text.find("::", compression + 2) != std::string::npos) ||
+        (text[0] == ':' && text.compare(0, 2, "::") != 0) ||
+        (text[text.size() - 1] == ':' && (text.size() < 2 || text.compare(text.size() - 2, 2, "::") != 0)))
+        return false;
+    unsigned int groups = 0;
+    std::size_t start = 0;
+    while (start < text.size())
+    {
+        const std::size_t end = text.find(':', start);
+        const std::string part = text.substr(start, end == std::string::npos ? end : end - start);
+        if (!part.empty())
+        {
+            if (part.find('.') != std::string::npos)
+            {
+                if (end != std::string::npos || !ipv4(part)) return false;
+                groups += 2;
+            }
+            else
+            {
+                if (part.size() > 4) return false;
+                for (std::size_t i = 0; i < part.size(); ++i)
+                    if (!std::isxdigit(static_cast<unsigned char>(part[i]))) return false;
+                ++groups;
+            }
+        }
+        if (end == std::string::npos) break;
+        start = end + 1;
+    }
+    return compression == std::string::npos ? groups == 8 : groups < 8;
+}
+
+bool HttpParser::validHost(const std::string& value)
+{
+    std::size_t port = std::string::npos;
+    if (!value.empty() && value[0] == '[')
+    {
+        const std::size_t end = value.find(']');
+        if (end == std::string::npos || !ipLiteral(value.substr(1, end - 1))) return false;
+        if (end + 1 < value.size())
+        {
+            if (value[end + 1] != ':') return false;
+            port = end + 2;
+        }
+    }
+    else
+    {
+        const std::size_t colon = value.find(':');
+        const std::size_t end = colon == std::string::npos ? value.size() : colon;
+        for (std::size_t i = 0; i < end; ++i)
+        {
+            const unsigned char c = value[i];
+            if (c == '%')
+            {
+                if (end - i < 3 || !std::isxdigit(static_cast<unsigned char>(value[i + 1])) ||
+                    !std::isxdigit(static_cast<unsigned char>(value[i + 2]))) return false;
+                i += 2;
+            }
+            else if (!regNameChar(c)) return false;
+        }
+        if (colon != std::string::npos) port = colon + 1;
+    }
+    if (port != std::string::npos)
+        for (std::size_t i = port; i < value.size(); ++i)
+            if (value[i] < '0' || value[i] > '9') return false;
+    return true;
+}
 int HttpParser::hexValue(char c)
 {
 	if (c >= '0' && c <= '9')
@@ -146,6 +261,10 @@ bool HttpParser::parseRequestLine(const std::string &line, HttpRequest &request)
 
 	request.setMethod(method);
 	request.setVersion(version);
+	for (std::size_t i = 0; i < method.size(); ++i)
+		if (!tokenChar(static_cast<unsigned char>(method[i]))) return false;
+	for (std::size_t i = 0; i < line.size(); ++i)
+		if (static_cast<unsigned char>(line[i]) < 32 || line[i] == 127) return false;
 
 	std::size_t question = target.find('?');
 	std::string rawPath;
@@ -176,6 +295,10 @@ bool HttpParser::parseRequestLine(const std::string &line, HttpRequest &request)
 
 bool HttpParser::parseHeaders(const std::string &headerBlock, HttpRequest &request) const
 {
+	for (std::size_t i = 0; i < headerBlock.size(); ++i)
+		if ((headerBlock[i] == '\n' && (i == 0 || headerBlock[i - 1] != '\r')) ||
+			(headerBlock[i] == '\r' && (i + 1 == headerBlock.size() || headerBlock[i + 1] != '\n')))
+			return false;
 	std::stringstream ss(headerBlock);
 	std::string line;
 
@@ -199,7 +322,7 @@ bool HttpParser::parseHeaders(const std::string &headerBlock, HttpRequest &reque
 		for (std::size_t i = 0; i < name.size(); ++i)
 		{
 			const unsigned char c = static_cast<unsigned char>(name[i]);
-			if (!std::isalnum(c) && std::string("!#$%&'*+-.^_`|~").find(c) == std::string::npos)
+			if (!tokenChar(c))
 				return false;
 			name[i] = static_cast<char>(std::tolower(c));
 		}
@@ -214,6 +337,12 @@ bool HttpParser::parseHeaders(const std::string &headerBlock, HttpRequest &reque
 		std::size_t end = value.find_last_not_of(" \t");
 		if (end != std::string::npos)
 			value.erase(end + 1);
+		for (std::size_t i = 0; i < value.size(); ++i)
+		{
+			const unsigned char c = value[i];
+			if ((c < 32 && c != '\t') || c == 127) return false;
+		}
+		if (name == "host" && !validHost(value)) return false;
 		request.setHeader(name, value);
 	}
 	return true;

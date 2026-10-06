@@ -1,4 +1,5 @@
 #include "CgiProcess.hpp"
+#include "RootedPath.hpp"
 #include <cstdlib>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -38,7 +39,8 @@ CgiProcess::~CgiProcess()
 
 bool CgiProcess::start(const std::string& interpreter, const std::string& scriptPath,
            const std::vector<std::string>& environment, const std::string& body,
-           const std::vector<int>& inheritedFds, unsigned int timeout)
+           const std::vector<int>& inheritedFds, unsigned int timeout,
+           int directoryFd, int scriptFd)
 {
     if (_startedOnce) return false;
     _startedOnce = true;
@@ -47,7 +49,7 @@ bool CgiProcess::start(const std::string& interpreter, const std::string& script
     _timeout = timeout;
     _input = body;
     const std::size_t slash = scriptPath.rfind('/');
-    const std::string directory = slash == std::string::npos ? "." :
+    std::string directory = slash == std::string::npos ? "." :
         (slash == 0 ? "/" : scriptPath.substr(0, slash));
     std::string script = slash == std::string::npos ? scriptPath : scriptPath.substr(slash + 1);
     if (script.empty()) { _error = 500; return false; }
@@ -57,6 +59,13 @@ bool CgiProcess::start(const std::string& interpreter, const std::string& script
         if (environment[i].empty() || environment[i].find('\0') != std::string::npos)
         { _error = 500; return false; }
     script = "./" + script; // A filename beginning with a dash must not become an interpreter option.
+    if (directoryFd >= 0 || scriptFd >= 0)
+    {
+        if (directoryFd <= STDERR_FILENO || scriptFd <= STDERR_FILENO)
+        { _error = 500; return false; }
+        directory = RootedPath::descriptorPath(directoryFd);
+        script = RootedPath::descriptorPath(scriptFd);
+    }
     std::vector<std::string> envCopy(environment);
     std::vector<char*> env;
     for (std::size_t i = 0; i < envCopy.size(); ++i) env.push_back(&envCopy[i][0]);
@@ -95,7 +104,9 @@ bool CgiProcess::start(const std::string& interpreter, const std::string& script
         for (std::size_t i = 0; i < 4; ++i)
             if (channelFds[i] > STDERR_FILENO) close(channelFds[i]);
         for (std::size_t i = 0; i < inheritedFds.size(); ++i)
-            if (inheritedFds[i] > STDERR_FILENO) close(inheritedFds[i]);
+            if (inheritedFds[i] > STDERR_FILENO && inheritedFds[i] != scriptFd)
+                close(inheritedFds[i]);
+        if (directoryFd > STDERR_FILENO) close(directoryFd);
         execve(executable.c_str(), args, &env[0]);
         std::exit(EXIT_FAILURE);
     }

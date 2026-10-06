@@ -23,6 +23,11 @@ public:
 					  std::size_t maxBodySize = std::numeric_limits<std::size_t>::max()) const;
 
 private:
+	static bool tokenChar(unsigned char c);
+	static bool regNameChar(unsigned char c);
+	static bool ipv4(const std::string& text);
+	static bool ipLiteral(const std::string& text);
+	static bool validHost(const std::string& value);
 	bool parseRequestLine(const std::string &line, HttpRequest &request) const;
 	bool parseHeaders(const std::string &headerBlock, HttpRequest &request) const;
 	ParseResult parseBody(const std::string &body, HttpRequest &request,

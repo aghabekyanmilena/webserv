@@ -45,9 +45,11 @@ RequestCgi::CgiResult RequestCgi::prepareCgi(const HTTPRequest& originalRequest,
     const Location* location = findLocation(request.uri, config);
     if (location == NULL) return CGI_NOT_SELECTED;
     const std::string& extension = location->getCgiExtension();
-    if (extension.empty() || request.uri.size() < extension.size() ||
-        request.uri.compare(request.uri.size() - extension.size(), extension.size(), extension) != 0)
-        return CGI_NOT_SELECTED;
+    if (extension.empty() || location->hasRedirect()) return CGI_NOT_SELECTED;
+    const bool direct = request.uri.size() >= extension.size() &&
+        request.uri.compare(request.uri.size() - extension.size(), extension.size(), extension) == 0;
+    const bool directoryRequest = !request.uri.empty() && request.uri[request.uri.size() - 1] == '/';
+    if (!direct && !directoryRequest) return CGI_NOT_SELECTED;
     if (!isSupportedMethod(request.method))
     { error = makeErrorResponse(501, "501 Not Implemented"); return CGI_ERROR; }
     if (!isMethodAllowed(request.method, *location))
@@ -56,17 +58,45 @@ RequestCgi::CgiResult RequestCgi::prepareCgi(const HTTPRequest& originalRequest,
         error.headers["Allow"] = buildAllowHeader(*location);
         return CGI_ERROR;
     }
-    if (location->hasRedirect()) return CGI_NOT_SELECTED;
     if (request.body.size() > config.getMaxBodySize())
     { error = makeErrorResponse(413, "413 Payload Too Large"); return CGI_ERROR; }
     if (request.method != "GET" && request.method != "POST")
     { error = makeErrorResponse(405, "405 Method Not Allowed"); error.headers["Allow"] = "GET, POST"; return CGI_ERROR; }
     plan.scriptPath = buildFilePath(request.uri, *location);
+    std::string scriptName = originalRequest.uri;
+    RootedPath script;
+    int status = 500;
     struct stat info;
-    if (stat(plan.scriptPath.c_str(), &info) != 0)
-    { error = makeErrorResponse(404, "404 Not Found"); return CGI_ERROR; }
-    if (!S_ISREG(info.st_mode) || access(plan.scriptPath.c_str(), R_OK) != 0)
+    if (!script.resolve(location->getRoot(), getRelativePath(request.uri, *location), status)
+        || !script.inspect(info, status))
+    {
+        if (!direct) return CGI_NOT_SELECTED;
+        error = makeErrorResponse(status, "CGI path denied or unavailable"); return CGI_ERROR;
+    }
+    if (!direct)
+    {
+        const std::string& index = location->getIndex();
+        if (!S_ISDIR(info.st_mode) || index.size() < extension.size() ||
+            index.compare(index.size() - extension.size(), extension.size(), extension) != 0)
+            return CGI_NOT_SELECTED;
+        RootedPath indexed;
+        if (!indexed.resolve(RootedPath::descriptorPath(script.targetFd()), index, status)
+            || !indexed.inspect(info, status))
+        {
+            if (status == 404) return CGI_NOT_SELECTED;
+            error = makeErrorResponse(status, "CGI index denied or unavailable"); return CGI_ERROR;
+        }
+        script = indexed;
+        plan.scriptPath = joinPath(plan.scriptPath, index);
+        scriptName += encodeUriPath("/" + index).substr(1);
+    }
+    if (!S_ISREG(info.st_mode) || access(RootedPath::descriptorPath(script.targetFd()).c_str(), R_OK) != 0)
     { error = makeErrorResponse(403, "403 Forbidden"); return CGI_ERROR; }
+    // Preserve both the script inode and its working directory until fork.
+    plan.directory.reset(dup(script.parentFd()));
+    plan.script.reset(dup(script.targetFd()));
+    if (plan.directory.get() < 0 || plan.script.get() < 0)
+    { error = makeErrorResponse(500, "500 Internal Server Error"); return CGI_ERROR; }
     plan.interpreter = location->getCgiPath();
     if (plan.interpreter.empty() || plan.interpreter[0] != '/' ||
         access(plan.interpreter.c_str(), X_OK) != 0 || context.serverPort < 1 || context.serverPort > 65535)
@@ -82,7 +112,7 @@ RequestCgi::CgiResult RequestCgi::prepareCgi(const HTTPRequest& originalRequest,
     plan.environment.push_back("SERVER_PORT=" + port.str());
     plan.environment.push_back("SERVER_PROTOCOL=" + context.protocol);
     plan.environment.push_back("REQUEST_METHOD=" + request.method);
-    plan.environment.push_back("SCRIPT_NAME=" + originalRequest.uri);
+    plan.environment.push_back("SCRIPT_NAME=" + scriptName);
     plan.environment.push_back("PATH_INFO=");
     plan.environment.push_back("QUERY_STRING=" + context.query);
     plan.environment.push_back("REMOTE_ADDR=" + context.remoteAddress);

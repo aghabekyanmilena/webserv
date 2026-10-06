@@ -10,20 +10,17 @@
 #include <new>
 #include <sstream>
 
-namespace
+static std::string errorResponse(int status, const ServerConfig& config)
 {
-	std::string errorResponse(int status, const ServerConfig& config)
-	{
 #ifdef WEBSERV_FAULT_INJECT
-		(void)status;
-		(void)config;
-		throw std::bad_alloc();
+	(void)status;
+	(void)config;
+	throw std::bad_alloc();
 #else
-		HttpResponse response = ResponseBuilder::makeError(status, "", config);
-		response.setHeader("Connection", "close");
-		return ResponseBuilder::serialize(response);
+	HttpResponse response = ResponseBuilder::makeError(status, "", config);
+	response.setHeader("Connection", "close");
+	return ResponseBuilder::serialize(response);
 #endif
-	}
 }
 
 volatile sig_atomic_t NetworkManager::_stopRequested = 0;
@@ -691,7 +688,7 @@ void NetworkManager::startCgi(int clientFd, const CgiRequest& plan)
 		if (!registered)
 		{ delete job; return; }
 		if (!job->process.start(plan.interpreter, plan.scriptPath, plan.environment,
-			plan.body, inheritedFds))
+			plan.body, inheritedFds, 5, plan.directory.get(), plan.script.get()))
 		{
 			cancelCgi(clientFd);
 			sendResponse(clientFd, errorResponse(500, _clients.find(clientFd)->second.getConfig()));

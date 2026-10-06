@@ -43,9 +43,12 @@ public:
 
     // interpreter must be absolute; scriptPath is relative to the server cwd.
     // inheritedFds must include all server/client/other-CGI descriptors.
+    // The server supplies pinned directory/script descriptors. The child uses
+    // them for its cwd and interpreter argument, retaining the script across exec.
     bool start(const std::string& interpreter, const std::string& scriptPath,
                const std::vector<std::string>& environment, const std::string& body,
-               const std::vector<int>& inheritedFds, unsigned int timeout = 5);
+               const std::vector<int>& inheritedFds, unsigned int timeout = 5,
+               int directoryFd = -1, int scriptFd = -1);
 
     int inputFd() const;
     int outputFd() const;

@@ -7,7 +7,7 @@ SRCDIR = src
 SRC = main.cpp $(SRCDIR)/Config.cpp $(SRCDIR)/ConfigParser.cpp $(SRCDIR)/Location.cpp $(SRCDIR)/ServerConfig.cpp\
 	$(SRCDIR)/ServerSocket.cpp $(SRCDIR)/NetworkManager.cpp $(SRCDIR)/Client.cpp \
 	$(SRCDIR)/RequestHandler.cpp $(SRCDIR)/RequestRouting.cpp $(SRCDIR)/RequestResources.cpp \
-	$(SRCDIR)/RequestUtils.cpp $(SRCDIR)/RequestCgi.cpp \
+	$(SRCDIR)/RequestUtils.cpp $(SRCDIR)/RootedPath.cpp $(SRCDIR)/RequestCgi.cpp \
 	$(SRCDIR)/CgiProcess.cpp $(SRCDIR)/CgiRequest.cpp $(SRCDIR)/CgiContext.cpp $(SRCDIR)/MultipartUpload.cpp \
 	$(SRCDIR)/HttpParser.cpp $(SRCDIR)/HttpRequest.cpp \
 	$(SRCDIR)/HttpResponse.cpp $(SRCDIR)/ResponseBuilder.cpp

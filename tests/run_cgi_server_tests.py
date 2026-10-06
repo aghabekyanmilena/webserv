@@ -156,8 +156,10 @@ def main():
                     }
                     # This fixture's upload route allows POST only; DELETE is
                     # reviewed from code, and normal DELETE has its own suite.
-                    print("Symlink review (known application gap):", outcomes)
-                    assert (outside / "new.txt").read_bytes() == b"test"
+                    print("Symlink containment checks:", outcomes)
+                    assert all(status == 403 for status in outcomes.values()), outcomes
+                    assert not (outside / "new.txt").exists()
+                    assert (outside / "sentinel.txt").read_text() == "disposable outside sentinel"
                 status, _, _ = request("POST", "/upload/nested/file.txt", b"nested upload")
                 assert status == 201
                 assert (root / "uploads" / "nested" / "file.txt").read_bytes() == b"nested upload"

@@ -11,44 +11,52 @@ declares a different `CgiContext` from `CgiContext.hpp`; linking both definition
 violates the C++ one-definition rule. The reserved legacy source is unchanged
 and is not part of the active integration.
 
-## Root escape through symlinks
+## Root containment
 
-The application rejects lexical `..` traversal, but `stat()`, `std::ifstream`,
-`opendir()`, and interpreter execution follow symbolic links. Consequently:
+The initial review found that GET, CGI, uploads, and DELETE could follow symlinks
+outside their configured roots. Those paths now use `RootedPath`:
 
-- GET can serve an outside file through a file or directory symlink.
-- CGI preparation can select an outside script through a symlink.
-- Uploads use `O_EXCL`, protecting the final filename, but a symlinked parent
-  can direct a new file outside `upload_path`.
-- DELETE through a symlinked parent can delete an outside file. A final-component
-  symlink deletes the link itself.
+- Every request-derived path component is opened with `O_PATH | O_NOFOLLOW`.
+  `stat` on the resulting descriptor identifies and rejects symbolic links.
+- Directory descriptors anchor subsequent operations through `/proc/self/fd`,
+  so replacing an earlier pathname does not redirect access to another directory.
+- GET reads the pinned regular-file inode. Directory listings and index lookup
+  use pinned directories; listings omit symlink entries.
+- Uploads create the final file exclusively inside the pinned parent. DELETE
+  removes an entry inside its pinned parent and cannot follow a final symlink.
+- CGI preparation retains the script and directory descriptors in `CgiRequest`.
+  The child changes to that directory and executes its interpreter against the
+  pinned script. It receives the effective index URI in `SCRIPT_NAME` when the
+  requested directory has a CGI index.
 
-These application paths remain unchanged while application integration is
-handled separately. A lexical-prefix comparison alone cannot fix this. The
-application work must enforce containment during actual access, including index
-files, listing directories, upload parents, and CGI script handoff. Avoid checking
-and then reopening the original untrusted path: a symlink can be replaced between
-those operations. Respect the subject's allowed-function list.
+The configured root itself is trusted and may contain symlinks. Symlinks below
+that root are rejected even when their targets are inside the root. This uses
+Linux procfs and the subject-listed `open`, `stat`, `dup`, and `close` functions;
+it introduces no `realpath`, `readlink`, `openat`, or `fcntl` calls. Descriptor
+ownership closes files on allocation failures as well as normal returns.
 
 Reproduce with harmless temporary fixtures: configure a root and a separate
 outside directory, place a symlink named `escape` inside the root pointing to
 the outside directory, and request `/escape/sentinel.txt`. With an upload route,
 POST and DELETE through that parent link also escape their configured roots.
-Use disposable sentinels. After the application fix, require rejection and
-verify that the outside files remain unchanged.
+Use disposable sentinels. Requests must be rejected and the outside files must
+remain unchanged.
 
-The disposable fixture check returned 200 for outside GET and CGI execution,
-and 201 for an outside upload. To repeat the diagnostic alongside CGI tests:
+The Bash/C++ regression checks cover outside file and parent links, static and
+CGI indices, uploads, DELETE, and replaced file/directory pathnames:
 
 ```sh
-python3 tests/run_cgi_server_tests.py --review-symlinks
+bash tests/manual_bug_checks.sh
 ```
 
-This diagnostic demonstrates the current gap; it is not a passing containment
-test. Normal upload and DELETE regression checks use paths inside their roots.
+The checks also confirm that ordinary static files, CGI working directories,
+and upload/DELETE operations continue to work.
 
-## Reserved files
+## Integration scope
 
-`src/Cgi.cpp`, `src/RequestHandler.cpp`, `src/HttpParser.cpp`, and
-`src/ConfigParser.cpp` were not edited. Integration uses the existing interfaces
-and the network/main handoff. No branches were merged; no commits or pushes were made.
+Legacy `src/Cgi.cpp` remains excluded. CGI uses the existing network/main handoff
+and single poll loop. HTTP request validation rejects invalid method tokens,
+Host values, header controls, and bare header newlines. Response serialization
+omits bodies and Content-Length for 204 responses. Uploads supply Location, and
+PDF files use application/pdf. No custom namespaces are defined in the server.
+No branches were merged; no commits or pushes were made.

@@ -36,7 +36,7 @@ with tempfile.TemporaryDirectory(prefix="webserv-application-") as temporary:
     executable = temp / "application-tests"
     command = [compiler, "-Wall", "-Wextra", "-Werror", "-std=c++98",
                "-I", str(ROOT / "include"), str(ROOT / "tests" / "application_tests.cpp"),
-               *[str(ROOT / "src" / (name + ".cpp")) for name in ("RequestHandler", "RequestResources", "RequestRouting", "RequestUtils", "RequestCgi")],
+               *[str(ROOT / "src" / (name + ".cpp")) for name in ("RequestHandler", "RequestResources", "RequestRouting", "RequestUtils", "RootedPath", "RequestCgi")],
                str(ROOT / "src" / "CgiProcess.cpp"), str(ROOT / "src" / "CgiRequest.cpp"),
                str(ROOT / "src" / "CgiContext.cpp"), str(ROOT / "src" / "MultipartUpload.cpp"),
                str(ROOT / "src" / "Location.cpp"),

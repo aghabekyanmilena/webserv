@@ -4,6 +4,7 @@
 
 class RequestResources : public RequestRouting
 {
+    class DirectoryGuard;
     protected:
         HTTPResponse handleGet(const HTTPRequest& request, const Location& location);
         HTTPResponse handlePost(const HTTPRequest& request, const Location& location);
