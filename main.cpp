@@ -60,7 +60,7 @@ static bool processRequest(const std::string &raw, const ServerConfig &config,
 
 int main(int argc, char **argv)
 {
-	if (argc > 2)
+	if (argc != 2)
 	{
 		std::cerr << "Usage: " << argv[0] << " [config.conf]" << std::endl;
 		return 1;
@@ -68,7 +68,7 @@ int main(int argc, char **argv)
 	try
 	{
 		Config config;
-		config.parseFile(argc == 2 ? argv[1] : "configs/webserv.conf");
+		config.parseFile(argv[1]);
 		NetworkManager network;
 		network.setRequestProcessor(processRequest);
 		const std::vector<ServerConfig> &servers = config.getServers();
