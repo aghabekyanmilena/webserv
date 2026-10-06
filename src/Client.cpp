@@ -10,13 +10,14 @@ namespace { const std::size_t MAX_HEADER_SIZE = 8192; }
 
 Client::Client(int fd)
     : _fd(fd),
+      _listenPort(-1),
       _config(),
       _readBuffer(),
       _writeBuffer(),
       _lastActivity(std::time(NULL)),
       _requestStartedAt(_lastActivity), _headerEnd(std::string::npos),
       _bodyExpected(0), _chunkPos(0), _chunkSize(0), _decodedBodySize(0),
-      _chunkState(0), _requestError(0), _chunked(false),
+      _chunkState(0), _requestError(0), _chunked(false), _configSelected(false),
       _requestComplete(false), _requestReady(false),
       _responsePending(false),
       _closed(false)
@@ -25,13 +26,30 @@ Client::Client(int fd)
 
 Client::Client(int fd, const ServerConfig& config)
     : _fd(fd),
+      _listenPort(-1),
       _config(config),
       _readBuffer(),
       _writeBuffer(),
       _lastActivity(std::time(NULL)),
       _requestStartedAt(_lastActivity), _headerEnd(std::string::npos),
       _bodyExpected(0), _chunkPos(0), _chunkSize(0), _decodedBodySize(0),
-      _chunkState(0), _requestError(0), _chunked(false),
+      _chunkState(0), _requestError(0), _chunked(false), _configSelected(true),
+      _requestComplete(false), _requestReady(false),
+      _responsePending(false),
+      _closed(false)
+{
+}
+
+Client::Client(int fd, const ServerConfig& config, int listenPort)
+    : _fd(fd),
+      _listenPort(listenPort),
+      _config(config),
+      _readBuffer(),
+      _writeBuffer(),
+      _lastActivity(std::time(NULL)),
+      _requestStartedAt(_lastActivity), _headerEnd(std::string::npos),
+      _bodyExpected(0), _chunkPos(0), _chunkSize(0), _decodedBodySize(0),
+      _chunkState(0), _requestError(0), _chunked(false), _configSelected(false),
       _requestComplete(false), _requestReady(false),
       _responsePending(false),
       _closed(false)
@@ -55,6 +73,21 @@ const ServerConfig& Client::getConfig() const
 int Client::getFd() const
 {
     return _fd;
+}
+
+int Client::getListenPort() const
+{
+    return _listenPort;
+}
+
+void Client::setConfig(const ServerConfig& config)
+{
+    _config = config;
+    _configSelected = true;
+    if (_requestError == 0 && _headerEnd != std::string::npos
+        && (_bodyExpected > _config.getMaxBodySize()
+            || _decodedBodySize > _config.getMaxBodySize()))
+        _requestError = 413;
 }
 
 bool Client::receiveData()
@@ -108,8 +141,6 @@ bool Client::receiveData()
                 {
                     _bodyExpected = request.getContentLength();
                     _chunked = request.isChunked();
-                    if (_bodyExpected > _config.getMaxBodySize())
-                        _requestError = 413;
                     _chunkPos = _headerEnd;
                 }
             }
@@ -149,7 +180,10 @@ bool Client::receiveData()
                         if (_requestError) break;
                         _chunkSize = count;
                         _chunkPos = end + 2;
-                        if (count > _config.getMaxBodySize() - _decodedBodySize)
+                        if (count > std::numeric_limits<std::size_t>::max() - _decodedBodySize)
+                        { _requestError = 400; break; }
+                        if (_configSelected
+                            && count > _config.getMaxBodySize() - _decodedBodySize)
                         { _requestError = 413; break; }
                         _decodedBodySize += count;
                         _chunkState = count == 0 ? 2 : 1;

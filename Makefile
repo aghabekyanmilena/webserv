@@ -7,7 +7,7 @@ SRCDIR = src
 SRC = main.cpp $(SRCDIR)/Config.cpp $(SRCDIR)/ConfigParser.cpp $(SRCDIR)/Location.cpp $(SRCDIR)/ServerConfig.cpp\
 	$(SRCDIR)/ServerSocket.cpp $(SRCDIR)/NetworkManager.cpp $(SRCDIR)/Client.cpp \
 	$(SRCDIR)/RequestHandler.cpp $(SRCDIR)/HttpParser.cpp $(SRCDIR)/HttpRequest.cpp \
-	$(SRCDIR)/HttpResponse.cpp $(SRCDIR)/ResponseBuilder.cpp
+	$(SRCDIR)/HttpResponse.cpp $(SRCDIR)/ResponseBuilder.cpp $(SRCDIR)/Cgi.cpp
 
 OBJDIR = out
 OBJ = $(addprefix $(OBJDIR)/,$(SRC:.cpp=.o))

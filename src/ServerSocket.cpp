@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <sstream>
 #include <cerrno>
+#include <cstring>
 
 static bool parseIPv4Address(const std::string& host, unsigned long& address)
 {

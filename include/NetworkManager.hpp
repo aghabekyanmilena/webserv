@@ -2,7 +2,10 @@
 
 #include <vector>
 #include <map>
+#include <string>
+#include <ctime>
 #include <poll.h>
+#include <signal.h>
 
 #include "ServerSocket.hpp"
 #include "Client.hpp"
@@ -10,58 +13,72 @@
 class NetworkManager
 {
 public:
-    typedef bool (*RequestProcessor)(const std::string&, const ServerConfig&, std::string&);
+	class ExtraFd
+	{
+	public:
+		typedef void (*Callback)(int, short, void *);
+		ExtraFd() : fd(-1), events(0), callback(NULL), context(NULL) {}
+		ExtraFd(int value, short wantedEvents, Callback cb, void *ctx)
+			: fd(value), events(wantedEvents), callback(cb), context(ctx) {}
+		int fd;
+		short events;
+		Callback callback;
+		void *context;
+	};
+
+	typedef bool (*RequestProcessor)(const std::string &, const ServerConfig &, std::string &);
+
 private:
-    std::vector<ServerSocket> _servers;
+	std::vector<ServerSocket> _servers;
+	std::vector<ServerConfig> _serverConfigs;
+	std::map<int, Client> _clients;
+	std::vector<pollfd> _pollFds;
+	std::map<int, ExtraFd> _extraFds;
+	int _connectionTimeout;
+	std::time_t _listenersPausedUntil;
+	RequestProcessor _requestProcessor;
+	static volatile sig_atomic_t _stopRequested;
 
-    std::map<int, Client>     _clients;
-
-    std::vector<pollfd>       _pollFds;
-
-    int                       _connectionTimeout;
-    std::time_t               _listenersPausedUntil;
-    RequestProcessor          _requestProcessor;
+	bool hasListener(const std::string &host, int port) const;
+	static std::string extractHostHeader(const std::string &raw);
+	static std::string normalizeHost(const std::string &host);
+	const ServerConfig &selectConfig(const std::string &listenHost, int listenPort,
+									const std::string &host) const;
+	static void handleSignal(int signalNumber);
 
 public:
-    NetworkManager();
-    ~NetworkManager();
-    void setRequestProcessor(RequestProcessor processor);
+	NetworkManager();
+	~NetworkManager();
+	void setRequestProcessor(RequestProcessor processor);
 
-    // Server/listener management
-    void addServer(const std::string& host, int port);
-    void addServer(const ServerConfig& config);
+	void addServer(const std::string &host, int port);
+	void addServer(const ServerConfig &config);
+	void initializeServers();
+	void run();
 
-    void initializeServers();
+	void buildPollFds();
+	void processEvents();
+	void handleNewConnection(ServerSocket &server);
+	void handleClientRead(int clientFd);
+	void handleClientWrite(int clientFd);
 
-    // Main networking loop
-    void run();
+	void addClient(int clientFd);
+	void addClient(int clientFd, const ServerConfig &config);
+	void addClient(int clientFd, const ServerConfig &config, int listenPort);
+	void removeClient(int clientFd);
 
-    // poll()
-    void buildPollFds();
-    void processEvents();
+	// Timeout handling
+	void checkTimeouts();
+	void shedIdleClients();
 
-    // Listener events
-    void handleNewConnection(ServerSocket& server);
+	// Interface toward HTTP/application layer
+	// Valid until this client is removed; NULL for an unknown client.
+	const ServerConfig *getClientConfig(int clientFd) const;
+	std::string receiveRequest(int clientFd);
+	void sendResponse(int clientFd, const std::string &response);
 
-    // Client events
-    void handleClientRead(int clientFd);
-    void handleClientWrite(int clientFd);
+	void addExtraFd(int fd, short events, ExtraFd::Callback callback, void *context);
+	void removeExtraFd(int fd);
 
-    // Client management
-    void addClient(int clientFd);
-    void addClient(int clientFd, const ServerConfig& config);
-    void removeClient(int clientFd);
-
-    // Timeout handling
-    void checkTimeouts();
-    void shedIdleClients();
-
-    // Interface toward HTTP/application layer
-    // Valid until this client is removed; NULL for an unknown client.
-    const ServerConfig* getClientConfig(int clientFd) const;
-    std::string receiveRequest(int clientFd);
-    void sendResponse(int clientFd, const std::string& response);
-
-    // Cleanup
-    void shutdown();
+	void shutdown();
 };
