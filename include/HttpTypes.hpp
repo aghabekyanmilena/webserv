@@ -7,6 +7,7 @@ struct HTTPRequest
 {
     std::string method; // GET, POST or DELETE
     std::string uri; // Resource path requested by client, example: /uploads/cat.txt
+    std::string query; // Raw query string without '?', used by CGI as QUERY_STRING
     std::string body; // Data sent by client, mainly used with POST, example: file content
     std::map<std::string, std::string> headers; // Request headers, example: "Host" -> "localhost:8080"
 };
