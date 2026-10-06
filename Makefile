@@ -9,7 +9,7 @@ SRC = main.cpp $(SRCDIR)/Config.cpp $(SRCDIR)/ConfigParser.cpp $(SRCDIR)/Locatio
 	$(SRCDIR)/RequestHandler.cpp $(SRCDIR)/HttpParser.cpp $(SRCDIR)/HttpRequest.cpp \
 	$(SRCDIR)/HttpResponse.cpp $(SRCDIR)/ResponseBuilder.cpp
 
-OBJDIR = obj
+OBJDIR = out
 OBJ = $(addprefix $(OBJDIR)/,$(SRC:.cpp=.o))
 DEP = $(OBJ:.o=.d)
 

@@ -44,10 +44,12 @@ HttpResponse ResponseBuilder::makeError(int statusCode, const std::string& body)
         case 307: response.setReasonPhrase("Temporary Redirect"); break;
         case 308: response.setReasonPhrase("Permanent Redirect"); break;
         case 400: response.setReasonPhrase("Bad Request"); break;
+        case 408: response.setReasonPhrase("Request Timeout"); break;
         case 403: response.setReasonPhrase("Forbidden"); break;
         case 404: response.setReasonPhrase("Not Found"); break;
         case 405: response.setReasonPhrase("Method Not Allowed"); break;
         case 413: response.setReasonPhrase("Payload Too Large"); break;
+        case 431: response.setReasonPhrase("Request Header Fields Too Large"); break;
         case 500: response.setReasonPhrase("Internal Server Error"); break;
         case 501: response.setReasonPhrase("Not Implemented"); break;
         default: response.setReasonPhrase("Unknown"); break;

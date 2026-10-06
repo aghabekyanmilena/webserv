@@ -19,6 +19,7 @@ private:
     std::vector<pollfd>       _pollFds;
 
     int                       _connectionTimeout;
+    std::time_t               _listenersPausedUntil;
     RequestProcessor          _requestProcessor;
 
 public:
@@ -53,6 +54,7 @@ public:
 
     // Timeout handling
     void checkTimeouts();
+    void shedIdleClients();
 
     // Interface toward HTTP/application layer
     // Valid until this client is removed; NULL for an unknown client.

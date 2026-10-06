@@ -1,12 +1,28 @@
 #include "NetworkManager.hpp"
+#include "ResponseBuilder.hpp"
 
 #include <ctime>
 #include <iostream>
 #include <signal.h>
 #include <stdexcept>
+#include <sstream>
+
+namespace
+{
+    volatile sig_atomic_t stopRequested = 0;
+    void requestStop(int) { stopRequested = 1; }
+
+    std::string errorResponse(int status)
+    {
+        HttpResponse response = ResponseBuilder::makeError(status, "");
+        response.setHeader("Connection", "close");
+        return ResponseBuilder::serialize(response);
+    }
+}
 
 NetworkManager::NetworkManager()
-    : _servers(), _clients(), _pollFds(), _connectionTimeout(30), _requestProcessor(NULL)
+    : _servers(), _clients(), _pollFds(), _connectionTimeout(30),
+      _listenersPausedUntil(0), _requestProcessor(NULL)
 {
     /* A send() to a client that disappeared must not terminate the server. */
     signal(SIGPIPE, SIG_IGN);
@@ -54,13 +70,12 @@ void NetworkManager::initializeServers()
     for (std::vector<ServerSocket>::iterator it = _servers.begin();
          it != _servers.end(); ++it)
     {
-        if (!it->create())
-            continue;
-
-        if (!it->bindSocket() || !it->listenSocket())
+        if (!it->create() || !it->bindSocket() || !it->listenSocket())
         {
             it->closeSocket();
-            continue;
+            std::ostringstream message;
+            message << "Cannot listen on " << it->getHost() << ":" << it->getPort();
+            throw std::runtime_error(message.str());
         }
 
         std::cout << "Listening on " << it->getHost()
@@ -71,14 +86,23 @@ void NetworkManager::initializeServers()
 
 void NetworkManager::run()
 {
-    while (true)
+    stopRequested = 0;
+    signal(SIGINT, requestStop);
+    signal(SIGTERM, requestStop);
+    while (!stopRequested)
     {
         buildPollFds();
 
         if (_pollFds.empty())
         {
-            std::cerr << "No active listening sockets or clients" << std::endl;
-            return;
+            bool hasListener = false;
+            for (std::size_t i = 0; i < _servers.size(); ++i)
+                hasListener = hasListener || _servers[i].getFd() != -1;
+            if (!hasListener && _clients.empty())
+                throw std::runtime_error("No active listening sockets or clients");
+            poll(NULL, 0, 1000);
+            checkTimeouts();
+            continue;
         }
 
         /*
@@ -109,7 +133,7 @@ void NetworkManager::buildPollFds()
         for (std::vector<ServerSocket>::const_iterator it = _servers.begin();
              it != _servers.end(); ++it)
         {
-            if (it->getFd() == -1)
+            if (it->getFd() == -1 || std::time(NULL) < _listenersPausedUntil)
                 continue;
 
             struct pollfd descriptor;
@@ -127,9 +151,7 @@ void NetworkManager::buildPollFds()
 
             struct pollfd descriptor;
             descriptor.fd = it->first;
-            descriptor.events = POLLIN;
-            if (it->second.hasPendingResponse())
-                descriptor.events |= POLLOUT;
+            descriptor.events = it->second.hasPendingResponse() ? POLLOUT : POLLIN;
             descriptor.revents = 0;
             nextPollFds.push_back(descriptor);
         }
@@ -210,7 +232,11 @@ void NetworkManager::handleNewConnection(ServerSocket& server)
     /* Called only after poll() reported POLLIN for the listening socket. */
     const int clientFd = server.acceptClient();
     if (clientFd == -1)
+    {
+        _listenersPausedUntil = std::time(NULL) + 2;
+        shedIdleClients();
         return;
+    }
 
     addClient(clientFd, server.getConfig());
 }
@@ -227,7 +253,14 @@ void NetworkManager::handleClientRead(int clientFd)
         removeClient(clientFd);
         return;
     }
-    if (_requestProcessor == NULL || it->second.hasPendingResponse())
+    if (it->second.hasPendingResponse())
+        return;
+    if (it->second.getRequestError())
+    {
+        sendResponse(clientFd, errorResponse(it->second.getRequestError()));
+        return;
+    }
+    if (_requestProcessor == NULL || !it->second.isRequestReady())
         return;
     try
     {
@@ -294,13 +327,16 @@ void NetworkManager::checkTimeouts()
 {
     const std::time_t now = std::time(NULL);
     std::vector<int> timedOutClients;
+    std::vector<int> incompleteClients;
 
     try
     {
         for (std::map<int, Client>::const_iterator it = _clients.begin();
              it != _clients.end(); ++it)
         {
-            if (it->second.hasTimedOut(now, _connectionTimeout))
+            if (it->second.hasRequestTimedOut(now, _connectionTimeout))
+                incompleteClients.push_back(it->first);
+            else if (it->second.hasTimedOut(now, _connectionTimeout))
                 timedOutClients.push_back(it->first);
         }
     }
@@ -309,11 +345,28 @@ void NetworkManager::checkTimeouts()
         return;
     }
 
+    for (std::vector<int>::const_iterator it = incompleteClients.begin();
+         it != incompleteClients.end(); ++it)
+        sendResponse(*it, errorResponse(408));
+
     for (std::vector<int>::const_iterator it = timedOutClients.begin();
          it != timedOutClients.end(); ++it)
     {
         removeClient(*it);
     }
+}
+
+void NetworkManager::shedIdleClients()
+{
+    // Reclaim a descriptor from the least recently active unfinished request.
+    std::map<int, Client>::const_iterator oldest = _clients.end();
+    for (std::map<int, Client>::const_iterator it = _clients.begin();
+         it != _clients.end(); ++it)
+        if (it->second.isIdle() && (oldest == _clients.end()
+            || it->second.getLastActivity() < oldest->second.getLastActivity()))
+            oldest = it;
+    if (oldest != _clients.end())
+        removeClient(oldest->first);
 }
 
 const ServerConfig* NetworkManager::getClientConfig(int clientFd) const
@@ -354,6 +407,7 @@ void NetworkManager::sendResponse(int clientFd, const std::string& response)
     /* Queue only.  The actual send() is deferred until poll() reports
      * POLLOUT, so application code never writes directly to the socket. */
     it->second.setResponse(response);
+    it->second.markRequestComplete();
     if (it->second.isClosed())
         removeClient(clientFd);
 }
