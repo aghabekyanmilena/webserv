@@ -59,7 +59,7 @@ public:
     // Call only after POLLIN for outputFd(); drain HUP only when POLLIN also appears.
     void onReadable();
 
-    // POLLHUP without POLLIN means the output pipe has no more buffered bytes.
+    // POLLHUP without POLLIN means the output channel has no more buffered bytes.
     void onOutputHangup();
     void onPipeError();
     void cancel();

@@ -1,6 +1,6 @@
 #include "CgiProcess.hpp"
 #include <cstdlib>
-#include <fcntl.h>
+#include <sys/socket.h>
 #include <unistd.h>
 #include <sys/wait.h>
 #include <signal.h>
@@ -65,52 +65,48 @@ bool CgiProcess::start(const std::string& interpreter, const std::string& script
     char* args[] = { &executable[0], &script[0], NULL };
     // Allocate bookkeeping before fork so parent-side allocation cannot orphan a child.
     _child = children().insert(children().end(), Child());
-    int inputPipe[2] = { -1, -1 };
-    int outputPipe[2] = { -1, -1 };
-    if (pipe(inputPipe) < 0 || pipe(outputPipe) < 0)
+    int inputSockets[2] = { -1, -1 };
+    int outputSockets[2] = { -1, -1 };
+    // The child needs blocking stdin/stdout. Only the server endpoints use
+    // MSG_DONTWAIT, so no descriptor flag changes or unlisted pipe2() are needed.
+    if (socketpair(AF_UNIX, SOCK_STREAM, 0, inputSockets) < 0 ||
+        socketpair(AF_UNIX, SOCK_STREAM, 0, outputSockets) < 0)
     {
-        closeFd(inputPipe[0]); closeFd(inputPipe[1]);
-        closeFd(outputPipe[0]); closeFd(outputPipe[1]);
+        closeFd(inputSockets[0]); closeFd(inputSockets[1]);
+        closeFd(outputSockets[0]); closeFd(outputSockets[1]);
         children().erase(_child); _error = 500; return false;
     }
-    if (inputPipe[0] <= STDERR_FILENO || inputPipe[1] <= STDERR_FILENO ||
-        outputPipe[0] <= STDERR_FILENO || outputPipe[1] <= STDERR_FILENO)
+    if (inputSockets[0] <= STDERR_FILENO || inputSockets[1] <= STDERR_FILENO ||
+        outputSockets[0] <= STDERR_FILENO || outputSockets[1] <= STDERR_FILENO)
     {
-        closeFd(inputPipe[0]); closeFd(inputPipe[1]);
-        closeFd(outputPipe[0]); closeFd(outputPipe[1]);
-        children().erase(_child); _error = 500; return false;
-    }
-    if (fcntl(inputPipe[1], F_SETFL, O_NONBLOCK) < 0 ||
-        fcntl(outputPipe[0], F_SETFL, O_NONBLOCK) < 0)
-    {
-        closeFd(inputPipe[0]); closeFd(inputPipe[1]);
-        closeFd(outputPipe[0]); closeFd(outputPipe[1]);
+        closeFd(inputSockets[0]); closeFd(inputSockets[1]);
+        closeFd(outputSockets[0]); closeFd(outputSockets[1]);
         children().erase(_child); _error = 500; return false;
     }
     _pid = fork();
     if (_pid == 0)
     {
         signal(SIGPIPE, SIG_DFL);
-        if (dup2(inputPipe[0], STDIN_FILENO) < 0 ||
-            dup2(outputPipe[1], STDOUT_FILENO) < 0 ||
+        if (dup2(inputSockets[0], STDIN_FILENO) < 0 ||
+            dup2(outputSockets[1], STDOUT_FILENO) < 0 ||
             chdir(directory.c_str()) < 0)
             std::exit(EXIT_FAILURE);
-        const int pipeFds[] = { inputPipe[0], inputPipe[1], outputPipe[0], outputPipe[1] };
+        const int channelFds[] = { inputSockets[0], inputSockets[1], outputSockets[0], outputSockets[1] };
         for (std::size_t i = 0; i < 4; ++i)
-            if (pipeFds[i] > STDERR_FILENO) close(pipeFds[i]);
+            if (channelFds[i] > STDERR_FILENO) close(channelFds[i]);
         for (std::size_t i = 0; i < inheritedFds.size(); ++i)
             if (inheritedFds[i] > STDERR_FILENO) close(inheritedFds[i]);
         execve(executable.c_str(), args, &env[0]);
         std::exit(EXIT_FAILURE);
     }
-    closeFd(inputPipe[0]); closeFd(outputPipe[1]);
+    closeFd(inputSockets[0]); closeFd(outputSockets[1]);
     if (_pid < 0)
     {
-        closeFd(inputPipe[1]); closeFd(outputPipe[0]);
+        closeFd(inputSockets[1]); closeFd(outputSockets[0]);
         children().erase(_child); _error = 500; return false;
     }
     _child->pid = _pid;
-    _inputFd = inputPipe[1]; _outputFd = outputPipe[0];
+    _inputFd = inputSockets[1]; _outputFd = outputSockets[0];
     _started = std::time(NULL);
     if (_input.empty()) closeFd(_inputFd); // CGI gets EOF, even for an empty body.
     return true;
@@ -136,7 +132,7 @@ void CgiProcess::onWritable()
     if (_inputFd < 0 || _error != 0) return;
     const std::size_t remaining = _input.size() - _sent;
     const std::size_t count = remaining < 8192 ? remaining : 8192;
-    const ssize_t written = write(_inputFd, _input.data() + _sent, count);
+    const ssize_t written = send(_inputFd, _input.data() + _sent, count, MSG_DONTWAIT);
     if (written <= 0) { fail(500); return; } // Never inspect errno after I/O.
     _sent += static_cast<std::size_t>(written);
     if (_sent == _input.size()) closeFd(_inputFd);
@@ -146,7 +142,7 @@ void CgiProcess::onReadable()
 {
     if (_outputFd < 0 || _error != 0) return;
     char buffer[8192];
-    const ssize_t received = read(_outputFd, buffer, sizeof(buffer));
+    const ssize_t received = recv(_outputFd, buffer, sizeof(buffer), MSG_DONTWAIT);
     if (received < 0) { fail(500); return; }
     if (received == 0) { closeFd(_outputFd); return; }
     const std::size_t count = static_cast<std::size_t>(received);

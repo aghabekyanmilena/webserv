@@ -10,7 +10,10 @@ SRC = main.cpp $(SRCDIR)/Config.cpp $(SRCDIR)/ConfigParser.cpp $(SRCDIR)/Locatio
 	$(SRCDIR)/RequestUtils.cpp $(SRCDIR)/RequestCgi.cpp \
 	$(SRCDIR)/CgiProcess.cpp $(SRCDIR)/CgiRequest.cpp $(SRCDIR)/CgiContext.cpp $(SRCDIR)/MultipartUpload.cpp \
 	$(SRCDIR)/HttpParser.cpp $(SRCDIR)/HttpRequest.cpp \
-	$(SRCDIR)/HttpResponse.cpp $(SRCDIR)/ResponseBuilder.cpp $(SRCDIR)/Cgi.cpp
+	$(SRCDIR)/HttpResponse.cpp $(SRCDIR)/ResponseBuilder.cpp
+
+# RequestCgi is the active CGI parser/environment path. Legacy Cgi.cpp defines
+# a different CgiContext type and must not be linked alongside that path.
 
 OBJDIR = out
 OBJ = $(addprefix $(OBJDIR)/,$(SRC:.cpp=.o))

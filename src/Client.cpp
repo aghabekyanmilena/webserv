@@ -12,10 +12,12 @@ Client::Client(int fd)
     : _fd(fd),
       _listenPort(-1),
       _config(),
+      _remoteAddress(),
       _readBuffer(),
       _writeBuffer(),
       _lastActivity(std::time(NULL)),
-      _requestStartedAt(_lastActivity), _headerEnd(std::string::npos),
+      _requestStartedAt(_lastActivity), _responseQueuedAt(0),
+      _emergencyResponse(NULL), _emergencySent(0), _headerEnd(std::string::npos),
       _bodyExpected(0), _chunkPos(0), _chunkSize(0), _decodedBodySize(0),
       _chunkState(0), _requestError(0), _chunked(false), _configSelected(false),
       _requestComplete(false), _requestReady(false),
@@ -28,10 +30,12 @@ Client::Client(int fd, const ServerConfig& config)
     : _fd(fd),
       _listenPort(-1),
       _config(config),
+      _remoteAddress(),
       _readBuffer(),
       _writeBuffer(),
       _lastActivity(std::time(NULL)),
-      _requestStartedAt(_lastActivity), _headerEnd(std::string::npos),
+      _requestStartedAt(_lastActivity), _responseQueuedAt(0),
+      _emergencyResponse(NULL), _emergencySent(0), _headerEnd(std::string::npos),
       _bodyExpected(0), _chunkPos(0), _chunkSize(0), _decodedBodySize(0),
       _chunkState(0), _requestError(0), _chunked(false), _configSelected(true),
       _requestComplete(false), _requestReady(false),
@@ -44,10 +48,12 @@ Client::Client(int fd, const ServerConfig& config, int listenPort)
     : _fd(fd),
       _listenPort(listenPort),
       _config(config),
+      _remoteAddress(),
       _readBuffer(),
       _writeBuffer(),
       _lastActivity(std::time(NULL)),
-      _requestStartedAt(_lastActivity), _headerEnd(std::string::npos),
+      _requestStartedAt(_lastActivity), _responseQueuedAt(0),
+      _emergencyResponse(NULL), _emergencySent(0), _headerEnd(std::string::npos),
       _bodyExpected(0), _chunkPos(0), _chunkSize(0), _decodedBodySize(0),
       _chunkState(0), _requestError(0), _chunked(false), _configSelected(false),
       _requestComplete(false), _requestReady(false),
@@ -90,6 +96,9 @@ void Client::setConfig(const ServerConfig& config)
         _requestError = 413;
 }
 
+void Client::setRemoteAddress(const std::string& address) { _remoteAddress = address; }
+const std::string& Client::getRemoteAddress() const { return _remoteAddress; }
+
 bool Client::receiveData()
 {
     /*
@@ -100,12 +109,16 @@ bool Client::receiveData()
      * forbids errno-based behaviour after read/recv.
      */
     char buffer[8192];
-    const ssize_t bytesRead = recv(_fd, buffer, sizeof(buffer), 0);
+    const ssize_t bytesRead = recv(_fd, buffer, sizeof(buffer), MSG_DONTWAIT);
 
     if (bytesRead > 0)
     {
         try
         {
+            // A handed-off CGI request is complete. Keep detecting disconnects
+            // without retaining pipelined bytes during the running job.
+            if (_requestComplete)
+            { updateActivity(); return true; }
             const std::size_t oldSize = _readBuffer.size();
             _readBuffer.append(buffer, static_cast<std::string::size_type>(bytesRead));
             if (_requestReady || _requestComplete || _requestError)
@@ -246,13 +259,15 @@ void Client::clearReadBuffer()
 
 void Client::setResponse(const std::string& response)
 {
-    if (_closed || response.empty())
+    if (_closed || response.empty() || _emergencyResponse != NULL)
         return;
 
     try
     {
         /* Append instead of replacing so a partially-sent response cannot be
          * corrupted if the application queues more output for this client. */
+        if (!_responsePending)
+            _responseQueuedAt = std::time(NULL);
         _writeBuffer.append(response);
         _responsePending = !_writeBuffer.empty();
     }
@@ -262,11 +277,36 @@ void Client::setResponse(const std::string& response)
     }
 }
 
+void Client::setEmergencyResponse(const std::string& response)
+{
+    if (_closed || _responsePending || response.empty())
+        return;
+    // Copying a prebuilt string can still allocate. Borrow it instead, so even
+    // queueing the fallback is safe when every allocation fails.
+    _emergencyResponse = &response;
+    _emergencySent = 0;
+    _responseQueuedAt = std::time(NULL);
+    _responsePending = true;
+    _requestComplete = true;
+}
+
 bool Client::sendData()
 {
     /* PRECONDITION: call only after poll() reports POLLOUT. */
     if (_closed)
         return false;
+
+    if (_emergencyResponse != NULL)
+    {
+        const ssize_t sent = send(_fd, _emergencyResponse->data() + _emergencySent,
+            _emergencyResponse->size() - _emergencySent, MSG_DONTWAIT);
+        if (sent <= 0)
+        { markClosed(); return false; }
+        _emergencySent += static_cast<std::size_t>(sent);
+        _responsePending = _emergencySent < _emergencyResponse->size();
+        updateActivity();
+        return true;
+    }
 
     if (_writeBuffer.empty())
     {
@@ -274,7 +314,7 @@ bool Client::sendData()
         return true;
     }
 
-    const ssize_t bytesSent = send(_fd, _writeBuffer.data(), _writeBuffer.size(), 0);
+    const ssize_t bytesSent = send(_fd, _writeBuffer.data(), _writeBuffer.size(), MSG_DONTWAIT);
 
     if (bytesSent > 0)
     {
@@ -318,6 +358,12 @@ bool Client::hasRequestTimedOut(std::time_t now, int timeoutSeconds) const
         && timeoutSeconds > 0 && std::difftime(now, _requestStartedAt) >= timeoutSeconds;
 }
 
+bool Client::hasDrainTimedOut(std::time_t now, int timeoutSeconds) const
+{
+    return _responsePending && timeoutSeconds > 0
+        && std::difftime(now, _responseQueuedAt) >= timeoutSeconds;
+}
+
 bool Client::isClosed() const
 {
     return _closed;
@@ -339,6 +385,7 @@ void Client::closeConnection()
 
     _closed = true;
     _responsePending = false;
+    _emergencyResponse = NULL;
     _readBuffer.clear();
     _writeBuffer.clear();
 }

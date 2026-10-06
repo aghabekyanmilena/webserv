@@ -1,6 +1,5 @@
 #include "ServerSocket.hpp"
 
-#include <fcntl.h>
 #include <sstream>
 #include <cerrno>
 #include <cstring>
@@ -64,19 +63,11 @@ bool ServerSocket::create()
     if (_fd != -1)
         closeSocket();
 
-    _fd = socket(AF_INET, SOCK_STREAM, 0);
+    _fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
     if (_fd == -1)
     {
         std::cerr << "socket() failed for " << _host << ":" << _port
                   << ": " << std::strerror(errno) << std::endl;
-        return false;
-    }
-
-    if (fcntl(_fd, F_SETFL, O_NONBLOCK) == -1)
-    {
-        std::cerr << "Cannot make listening socket nonblocking: "
-                  << std::strerror(errno) << std::endl;
-        closeSocket();
         return false;
     }
 
@@ -147,22 +138,20 @@ bool ServerSocket::listenSocket()
     return true;
 }
 
-int ServerSocket::acceptClient()
+int ServerSocket::acceptClient(struct sockaddr_in* peer)
 {
     if (_fd == -1)
         return -1;
 
-    const int clientFd = accept(_fd, NULL, NULL);
+    socklen_t length = sizeof(struct sockaddr_in);
+    const int clientFd = accept(_fd, reinterpret_cast<struct sockaddr*>(peer),
+        peer == NULL ? NULL : &length);
 
     if (clientFd == -1)
         return -1;
 
-    if (fcntl(clientFd, F_SETFL, O_NONBLOCK) == -1)
-    {
-        close(clientFd);
-        return -1;
-    }
-
+    // Linux accept() does not inherit O_NONBLOCK. Client uses MSG_DONTWAIT on
+    // every poll-driven recv/send, without adding the unlisted accept4().
     return clientFd;
 }
 
