@@ -2,6 +2,8 @@
 
 #include <fcntl.h>
 #include <sstream>
+#include <cerrno>
+#include <cstring>
 
 static bool parseIPv4Address(const std::string& host, unsigned long& address)
 {
@@ -65,13 +67,15 @@ bool ServerSocket::create()
     _fd = socket(AF_INET, SOCK_STREAM, 0);
     if (_fd == -1)
     {
-        std::cerr << "socket() failed for " << _host << ":" << _port << std::endl;
+        std::cerr << "socket() failed for " << _host << ":" << _port
+                  << ": " << std::strerror(errno) << std::endl;
         return false;
     }
 
     if (fcntl(_fd, F_SETFL, O_NONBLOCK) == -1)
     {
-        std::cerr << "Cannot make listening socket nonblocking" << std::endl;
+        std::cerr << "Cannot make listening socket nonblocking: "
+                  << std::strerror(errno) << std::endl;
         closeSocket();
         return false;
     }
@@ -81,7 +85,7 @@ bool ServerSocket::create()
                    &reuseAddress, sizeof(reuseAddress)) == -1)
     {
         std::cerr << "setsockopt(SO_REUSEADDR) failed for "
-                  << _host << ":" << _port << std::endl;
+                  << _host << ":" << _port << ": " << std::strerror(errno) << std::endl;
         closeSocket();
         return false;
     }
@@ -120,7 +124,8 @@ bool ServerSocket::bindSocket()
     if (bind(_fd, reinterpret_cast<const struct sockaddr*>(&address),
              sizeof(address)) == -1)
     {
-        std::cerr << "bind() failed for " << _host << ":" << _port << std::endl;
+        std::cerr << "bind() failed for " << _host << ":" << _port
+                  << ": " << std::strerror(errno) << std::endl;
         return false;
     }
 
@@ -134,7 +139,8 @@ bool ServerSocket::listenSocket()
 
     if (listen(_fd, SOMAXCONN) == -1)
     {
-        std::cerr << "listen() failed for " << _host << ":" << _port << std::endl;
+        std::cerr << "listen() failed for " << _host << ":" << _port
+                  << ": " << std::strerror(errno) << std::endl;
         return false;
     }
 

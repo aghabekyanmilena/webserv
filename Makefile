@@ -10,9 +10,9 @@ SRC = main.cpp $(SRCDIR)/Config.cpp $(SRCDIR)/ConfigParser.cpp $(SRCDIR)/Locatio
 	$(SRCDIR)/RequestUtils.cpp $(SRCDIR)/RequestCgi.cpp \
 	$(SRCDIR)/CgiProcess.cpp $(SRCDIR)/CgiRequest.cpp $(SRCDIR)/CgiContext.cpp $(SRCDIR)/MultipartUpload.cpp \
 	$(SRCDIR)/HttpParser.cpp $(SRCDIR)/HttpRequest.cpp \
-	$(SRCDIR)/HttpResponse.cpp $(SRCDIR)/ResponseBuilder.cpp
+	$(SRCDIR)/HttpResponse.cpp $(SRCDIR)/ResponseBuilder.cpp $(SRCDIR)/Cgi.cpp
 
-OBJDIR = obj
+OBJDIR = out
 OBJ = $(addprefix $(OBJDIR)/,$(SRC:.cpp=.o))
 DEP = $(OBJ:.o=.d)
 

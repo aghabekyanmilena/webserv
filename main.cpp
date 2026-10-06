@@ -1,25 +1,27 @@
-#include "NetworkManager.hpp"
-#include "Config.hpp"
-#include "HttpParser.hpp"
-#include "RequestHandler.hpp"
-#include "ResponseBuilder.hpp"
+#include "include/NetworkManager.hpp"
+#include "include/Config.hpp"
+#include "include/HttpParser.hpp"
+#include "include/RequestHandler.hpp"
+#include "include/ResponseBuilder.hpp"
 #include <iostream>
 #include <exception>
-#include <fstream>
-#include <sstream>
 
-static bool processRequest(const std::string &raw, const ServerConfig &config,
-						   std::string &serialized)
+static bool processRequest(const std::string &raw, const ServerConfig &config, std::string &serialized)
 {
 	HttpRequest parsed;
 	HttpParser parser;
-	const HttpParser::ParseResult result = parser.parse(raw, parsed);
+	const std::size_t maxBody = config.getMaxBodySize();
+	const HttpParser::ParseResult result = parser.parse(raw, parsed, maxBody);
 	HTTPResponse response;
-	const bool tooLarge = parsed.getContentLength() > config.getMaxBodySize() || parsed.getBody().size() > config.getMaxBodySize();
-	if (!tooLarge && result == HttpParser::INCOMPLETE)
+
+	if (result == HttpParser::INCOMPLETE)
 		return false;
 
-	if (tooLarge)
+	if (result == HttpParser::HEADER_TOO_LARGE)
+		response.statusCode = 431;
+	else if (result == HttpParser::TOO_LARGE
+		|| parsed.getContentLength() > maxBody
+		|| parsed.getBody().size() > maxBody)
 		response.statusCode = 413;
 	else if (result == HttpParser::ERROR)
 		response.statusCode = 400;
@@ -28,28 +30,14 @@ static bool processRequest(const std::string &raw, const ServerConfig &config,
 		HTTPRequest request;
 		request.method = parsed.getMethod();
 		request.uri = parsed.getPath();
+		request.query = parsed.getQuery();
 		request.body = parsed.getBody();
 		request.headers = parsed.getHeaders();
 		RequestHandler handler;
 		response = handler.handleRequest(request, config);
 	}
-	if (response.statusCode >= 400)
-	{
-		const std::map<int, std::string> &pages = config.getErrorPages();
-		std::map<int, std::string>::const_iterator page = pages.find(response.statusCode);
-		if (page != pages.end())
-		{
-			std::ifstream file(page->second.c_str(), std::ios::in | std::ios::binary);
-			if (file)
-			{
-				std::ostringstream body;
-				body << file.rdbuf();
-				response.body = body.str();
-				response.headers["Content-Type"] = "text/html";
-			}
-		}
-	}
-	HttpResponse formatted = ResponseBuilder::makeError(response.statusCode, response.body);
+
+	HttpResponse formatted = ResponseBuilder::makeError(response.statusCode, response.body, config);
 	for (std::map<std::string, std::string>::const_iterator it = response.headers.begin();
 		 it != response.headers.end(); ++it)
 		formatted.setHeader(it->first, it->second);
@@ -62,13 +50,13 @@ int main(int argc, char **argv)
 {
 	if (argc != 2)
 	{
-		std::cerr << "Usage: " << argv[0] << " [config.conf]" << std::endl;
+		std::cerr << "Usage: " << argv[0] << " [configuration file]" << std::endl;
 		return 1;
 	}
 	try
 	{
 		Config config;
-		config.parseFile(argc == 2 ? argv[1] : "configs/webserv.conf");
+		config.parseFile(argv[1]);
 		NetworkManager network;
 		network.setRequestProcessor(processRequest);
 		const std::vector<ServerConfig> &servers = config.getServers();
