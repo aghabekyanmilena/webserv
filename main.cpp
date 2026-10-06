@@ -17,7 +17,7 @@ static bool processRequest(const std::string &raw, const ServerConfig &config, s
 	if (result == HttpParser::INCOMPLETE)
 		return false;
 
-	if (result == HttpParser::ParseResult::HEADER_TOO_LARGE)
+	if (result == HttpParser::HEADER_TOO_LARGE)
 		response.statusCode = 431;
 	else if (result == HttpParser::TOO_LARGE
 		|| (maxBody != 0 && parsed.getContentLength() > maxBody)
