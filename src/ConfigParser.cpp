@@ -180,7 +180,7 @@ ServerConfig ConfigParser::server()
 			int port = static_cast<int>(number(arg, 65535));
 			if (!port)
 				fail("listen port must be 1..65535");
-			const std::vector<int> &ports = server.getListenPorts();
+			const std::vector<int> &ports = server.getListeningPorts();
 			if (std::find(ports.begin(), ports.end(), port) != ports.end())
 				fail("duplicate listen port");
 			server.addListenPort(port);
@@ -207,7 +207,7 @@ ServerConfig ConfigParser::server()
 		expect(";");
 	}
 	expect("}");
-	if (server.getListenPorts().empty())
+	if (server.getListeningPorts().empty())
 		fail("server requires a listen directive");
 	// Apply server root after the complete block, regardless of directive order.
 	// Rebuild locations so callers receive their effective roots.
@@ -216,8 +216,8 @@ ServerConfig ConfigParser::server()
 	result.setServerName(server.getServerName());
 	result.setRoot(server.getRoot());
 	result.setMaxBodySize(server.getMaxBodySize());
-	for (size_t i = 0; i < server.getListenPorts().size(); ++i)
-		result.addListenPort(server.getListenPorts()[i]);
+	for (size_t i = 0; i < server.getListeningPorts().size(); ++i)
+		result.addListenPort(server.getListeningPorts()[i]);
 	const std::map<int, std::string> &errors = server.getErrorPages();
 	for (std::map<int, std::string>::const_iterator it = errors.begin(); it != errors.end(); ++it)
 		result.addErrorPage(it->first, it->second);

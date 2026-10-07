@@ -6,64 +6,21 @@
 #include <limits>
 #include <cctype>
 
-namespace { const std::size_t MAX_HEADER_SIZE = 8192; }
+const std::size_t MAX_HEADER_SIZE = 8192;
 
-Client::Client(int fd)
-    : _fd(fd),
-      _listenPort(-1),
-      _config(),
-      _readBuffer(),
-      _writeBuffer(),
-      _lastActivity(std::time(NULL)),
-      _requestStartedAt(_lastActivity), _headerEnd(std::string::npos),
-      _bodyExpected(0), _chunkPos(0), _chunkSize(0), _decodedBodySize(0),
-      _chunkState(0), _requestError(0), _chunked(false), _configSelected(false),
-      _requestComplete(false), _requestReady(false),
-      _responsePending(false),
-      _closed(false)
-{
-}
+Client::Client(int fd) : _fd(fd), _listeningPort(-1), _config(), _readBuffer(), _writeBuffer(), _lastActivity(std::time(NULL)), _requestStartedAt(_lastActivity), _headerEnd(std::string::npos),
+    _bodyExpected(0), _chunkPos(0), _chunkSize(0),_decodedBodySize(0), _chunkState(0), _requestError(0), _chunked(false), _configSelected(false), _requestComplete(false), _requestReady(false), _responsePending(false), _closed(false)
+{ }
 
-Client::Client(int fd, const ServerConfig& config)
-    : _fd(fd),
-      _listenPort(-1),
-      _config(config),
-      _readBuffer(),
-      _writeBuffer(),
-      _lastActivity(std::time(NULL)),
-      _requestStartedAt(_lastActivity), _headerEnd(std::string::npos),
-      _bodyExpected(0), _chunkPos(0), _chunkSize(0), _decodedBodySize(0),
-      _chunkState(0), _requestError(0), _chunked(false), _configSelected(true),
-      _requestComplete(false), _requestReady(false),
-      _responsePending(false),
-      _closed(false)
-{
-}
+Client::Client(int fd, const ServerConfig& config) : _fd(fd), _listeningPort(-1), _config(config), _readBuffer(), _writeBuffer(), _lastActivity(std::time(NULL)), _requestStartedAt(_lastActivity),
+    _headerEnd(std::string::npos), _bodyExpected(0), _chunkPos(0), _chunkSize(0), _decodedBodySize(0), _chunkState(0), _requestError(0), _chunked(false), _configSelected(true), _requestComplete(false), _requestReady(false), _responsePending(false), _closed(false)
+{ }
 
-Client::Client(int fd, const ServerConfig& config, int listenPort)
-    : _fd(fd),
-      _listenPort(listenPort),
-      _config(config),
-      _readBuffer(),
-      _writeBuffer(),
-      _lastActivity(std::time(NULL)),
-      _requestStartedAt(_lastActivity), _headerEnd(std::string::npos),
-      _bodyExpected(0), _chunkPos(0), _chunkSize(0), _decodedBodySize(0),
-      _chunkState(0), _requestError(0), _chunked(false), _configSelected(false),
-      _requestComplete(false), _requestReady(false),
-      _responsePending(false),
-      _closed(false)
-{
-}
+Client::Client(int fd, const ServerConfig& config, int listenPort) : _fd(fd), _listeningPort(listenPort), _config(config), _readBuffer(), _writeBuffer(), _lastActivity(std::time(NULL)),
+    _requestStartedAt(_lastActivity), _headerEnd(std::string::npos), _bodyExpected(0), _chunkPos(0), _chunkSize(0), _decodedBodySize(0), _chunkState(0), _requestError(0), _chunked(false), _configSelected(false), _requestComplete(false), _requestReady(false), _responsePending(false), _closed(false)
+{ }
 
-Client::~Client()
-{
-    /*
-     * NetworkManager owns the lifetime of client file descriptors.
-     * Client objects are stored by value in std::map, so closing here would
-     * make temporary/copy destruction able to close a live descriptor.
-     */
-}
+Client::~Client() { }
 
 const ServerConfig& Client::getConfig() const
 {
@@ -75,9 +32,9 @@ int Client::getFd() const
     return _fd;
 }
 
-int Client::getListenPort() const
+int Client::getListeningPort() const
 {
-    return _listenPort;
+    return _listeningPort;
 }
 
 void Client::setConfig(const ServerConfig& config)
@@ -92,13 +49,8 @@ void Client::setConfig(const ServerConfig& config)
 
 bool Client::receiveData()
 {
-    /*
-     * PRECONDITION: NetworkManager calls this only after poll() reports
-     * POLLIN for this descriptor.  We intentionally perform one recv() per
-     * readiness notification instead of reading until EAGAIN: the subject
-     * forbids socket reads that were not preceded by poll() readiness and
-     * forbids errno-based behaviour after read/recv.
-     */
+    // poll->POLLIN
+
     char buffer[8192];
     const ssize_t bytesRead = recv(_fd, buffer, sizeof(buffer), 0);
 
@@ -110,7 +62,7 @@ bool Client::receiveData()
             _readBuffer.append(buffer, static_cast<std::string::size_type>(bytesRead));
             if (_requestReady || _requestComplete || _requestError)
             {
-                updateActivity();
+                update_last_activity();
                 return true;
             }
 
@@ -122,14 +74,14 @@ bool Client::receiveData()
                 {
                     if (_readBuffer.size() > MAX_HEADER_SIZE)
                         _requestError = 431;
-                    updateActivity();
+                    update_last_activity();
                     return true;
                 }
                 _headerEnd = end + 4;
                 if (_headerEnd > MAX_HEADER_SIZE)
                 {
                     _requestError = 431;
-                    updateActivity();
+                    update_last_activity();
                     return true;
                 }
                 HttpParser parser;
@@ -149,8 +101,6 @@ bool Client::receiveData()
                 _requestReady = _readBuffer.size() - _headerEnd >= _bodyExpected;
             else if (_requestError == 0)
             {
-                // Advance through chunk framing only once; the HTTP parser runs
-                // when the complete request is available.
                 while (_chunkPos < _readBuffer.size() && !_requestReady && !_requestError)
                 {
                     if (_chunkState == 0) // chunk size line
@@ -216,22 +166,22 @@ bool Client::receiveData()
         }
         catch (...)
         {
-            markClosed();
+            set_closed();
             return false;
         }
-        updateActivity();
+        update_last_activity();
         return true;
     }
 
     /* bytesRead == 0: orderly peer shutdown.  bytesRead < 0: I/O failed.
      * We do not inspect errno after recv(), as required by the subject. */
-    markClosed();
+    set_closed();
     return false;
 }
 
 bool Client::isRequestReady() const { return _requestReady; }
 int Client::getRequestError() const { return _requestError; }
-void Client::markRequestComplete() { _requestComplete = true; }
+void Client::setRequestComplete() { _requestComplete = true; }
 bool Client::isIdle() const { return !_responsePending && !_requestReady && !_requestComplete; }
 
 const std::string& Client::getReadBuffer() const
@@ -258,7 +208,7 @@ void Client::setResponse(const std::string& response)
     }
     catch (...)
     {
-        markClosed();
+        set_closed();
     }
 }
 
@@ -280,12 +230,12 @@ bool Client::sendData()
     {
         _writeBuffer.erase(0, static_cast<std::string::size_type>(bytesSent));
         _responsePending = !_writeBuffer.empty();
-        updateActivity();
+        update_last_activity();
         return true;
     }
 
     /* Do not inspect errno after send(), per the subject. */
-    markClosed();
+    set_closed();
     return false;
 }
 
@@ -294,7 +244,7 @@ bool Client::hasPendingResponse() const
     return _responsePending;
 }
 
-void Client::updateActivity()
+void Client::update_last_activity()
 {
     _lastActivity = std::time(NULL);
 }
@@ -323,7 +273,7 @@ bool Client::isClosed() const
     return _closed;
 }
 
-void Client::markClosed()
+void Client::set_closed()
 {
     _closed = true;
 }

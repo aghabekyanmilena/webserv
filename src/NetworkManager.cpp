@@ -85,7 +85,7 @@ void NetworkManager::addServer(const ServerConfig& config)
 			throw std::runtime_error("Add server configurations before initialization");
 	}
 
-	const std::vector<int>& ports = config.getListenPorts();
+	const std::vector<int>& ports = config.getListeningPorts();
 	if (ports.empty())
 		throw std::runtime_error("Server configuration requires a listen port");
 
@@ -350,7 +350,7 @@ const ServerConfig& NetworkManager::selectConfig(const std::string& listenHost, 
 		const ServerConfig& config = _serverConfigs[i];
 		if (config.getHost() != listenHost)
 			continue;
-		const std::vector<int>& ports = config.getListenPorts();
+		const std::vector<int>& ports = config.getListeningPorts();
 		for (std::size_t j = 0; j < ports.size(); ++j)
 		{
 			if (ports[j] != listenPort)
@@ -393,9 +393,9 @@ void NetworkManager::handleClientRead(int clientFd)
 		}
 
 		const std::string host = extractHostHeader(it->second.getReadBuffer());
-		const ServerConfig& selected = it->second.getListenPort() == -1
+		const ServerConfig& selected = it->second.getListeningPort() == -1
 			? it->second.getConfig()
-			: selectConfig(it->second.getConfig().getHost(), it->second.getListenPort(), host);
+			: selectConfig(it->second.getConfig().getHost(), it->second.getListeningPort(), host);
 		it->second.setConfig(selected);
 		if (it->second.getRequestError())
 		{
@@ -547,7 +547,7 @@ void NetworkManager::sendResponse(int clientFd, const std::string& response)
 	if (it == _clients.end())
 		return;
 	it->second.setResponse(response);
-	it->second.markRequestComplete();
+	it->second.setRequestComplete();
 	if (it->second.isClosed())
 		removeClient(clientFd);
 }

@@ -47,7 +47,7 @@ void ServerConfig::setMaxBodySize(size_t size)
 	max_body_size = size;
 }
 
-const std::vector<int> &ServerConfig::getListenPorts() const
+const std::vector<int> &ServerConfig::getListeningPorts() const
 {
 	return listen_ports;
 }

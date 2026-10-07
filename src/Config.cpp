@@ -19,10 +19,10 @@ bool Config::validate() const
 	{
 		const ServerConfig &server = servers[i];
 
-		if (server.getListenPorts().empty())
+		if (server.getListeningPorts().empty())
 			return false;
 
-		const std::vector<int> &ports = server.getListenPorts();
+		const std::vector<int> &ports = server.getListeningPorts();
 
 		for (std::size_t j = 0; j < ports.size(); ++j)
 		{

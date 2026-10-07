@@ -6,9 +6,39 @@
 
 class Client
 {
+public:
+    Client(int fd);
+    Client(int fd, const ServerConfig& config);
+    Client(int fd, const ServerConfig& config, int listenPort);
+    ~Client();
+
+    int getFd() const;
+    int getListeningPort() const;
+    const ServerConfig& getConfig() const;
+    void setConfig(const ServerConfig& config);
+
+    bool receiveData();
+    bool isRequestReady() const;
+    int getRequestError() const;
+    void setRequestComplete();
+    const std::string& getReadBuffer() const;
+    void clearReadBuffer();
+
+    void setResponse(const std::string& response);
+    bool sendData();
+    bool hasPendingResponse() const;
+
+    std::time_t getLastActivity() const;
+    bool hasTimedOut(std::time_t now, int timeoutSeconds) const;
+    bool hasRequestTimedOut(std::time_t now, int timeoutSeconds) const;
+    bool isIdle() const;
+
+    bool isClosed() const;
+    void closeConnection();
+
 private:
     int          _fd;
-    int          _listenPort;
+    int          _listeningPort;
     ServerConfig _config;
     std::string  _readBuffer;
     std::string  _writeBuffer;
@@ -28,35 +58,7 @@ private:
     bool         _responsePending;
     bool         _closed;
 
-public:
-    Client(int fd);
-    Client(int fd, const ServerConfig& config);
-    Client(int fd, const ServerConfig& config, int listenPort);
-    ~Client();
+    void update_last_activity();
+    void set_closed();
 
-    int getFd() const;
-    int getListenPort() const;
-    const ServerConfig& getConfig() const;
-    void setConfig(const ServerConfig& config);
-
-    bool receiveData();
-    bool isRequestReady() const;
-    int getRequestError() const;
-    void markRequestComplete();
-    const std::string& getReadBuffer() const;
-    void clearReadBuffer();
-
-    void setResponse(const std::string& response);
-    bool sendData();
-    bool hasPendingResponse() const;
-
-    void updateActivity();
-    std::time_t getLastActivity() const;
-    bool hasTimedOut(std::time_t now, int timeoutSeconds) const;
-    bool hasRequestTimedOut(std::time_t now, int timeoutSeconds) const;
-    bool isIdle() const;
-
-    bool isClosed() const;
-    void markClosed();
-    void closeConnection();
 };

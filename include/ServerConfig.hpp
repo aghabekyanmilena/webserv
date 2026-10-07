@@ -34,7 +34,7 @@ public:
 	void addErrorPage(int statusCode, const std::string &path);
 	void setMaxBodySize(size_t size);
 
-	const std::vector<int> &getListenPorts() const;
+	const std::vector<int> &getListeningPorts() const;
 	const std::vector<Location> &getLocations() const;
 	const std::map<int, std::string> &getErrorPages() const;
 	size_t getMaxBodySize() const;
