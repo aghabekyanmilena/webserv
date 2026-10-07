@@ -6,8 +6,7 @@
 #include <iostream>
 #include <exception>
 
-static std::string serializeResponse(const HTTPResponse& response, const ServerConfig& config,
-    bool preserveBody = false)
+static std::string serializeResponse(const HTTPResponse& response, const ServerConfig& config, bool preserveBody = false)
 {
     HttpResponse formatted;
     if (preserveBody)
@@ -18,21 +17,26 @@ static std::string serializeResponse(const HTTPResponse& response, const ServerC
     }
     else
         formatted = ResponseBuilder::makeError(response.statusCode, response.body, config);
-    for (std::map<std::string, std::string>::const_iterator it = response.headers.begin();
-         it != response.headers.end(); ++it)
+    
+    for (std::map<std::string, std::string>::const_iterator it = response.headers.begin(); it != response.headers.end(); ++it)
+    {
         formatted.setHeader(it->first, it->second);
+    }
+
     formatted.setHeader("Connection", "close");
     return ResponseBuilder::serialize(formatted);
 }
 
 static std::string applicationPath(const std::string& decoded)
 {
-    // HttpParser already decoded the URI. Application APIs expect an encoded
-    // path and decode it once more; escape literal '%' to prevent double decoding.
     std::string encoded;
     for (std::size_t i = 0; i < decoded.size(); ++i)
-        if (decoded[i] == '%') encoded += "%25";
-        else encoded += decoded[i];
+    {
+        if (decoded[i] == '%')
+            encoded += "%25";
+        else
+            encoded += decoded[i];
+    }
     return encoded;
 }
 
@@ -40,13 +44,10 @@ static std::string processCgiResponse(const std::string& output, const ServerCon
 {
     RequestHandler handler;
     const HTTPResponse response = handler.parseCgiOutput(output);
-    // Valid CGI output already supplies the entity body, including empty error
-    // bodies. Preserve it; malformed output follows the normal error-page path.
     return serializeResponse(response, config, response.headers.count("Content-Length") != 0);
 }
 
-static bool processRequest(const std::string &raw, const ServerConfig &config, std::string &serialized,
-    CgiRequest& plan, const CgiContext& clientContext)
+static bool processRequest(const std::string &raw, const ServerConfig &config, std::string &serialized, CgiRequest& plan, const CgiContext& clientContext)
 {
     HttpRequest parsed;
     HttpParser parser;
@@ -59,9 +60,7 @@ static bool processRequest(const std::string &raw, const ServerConfig &config, s
 
     if (result == HttpParser::HEADER_TOO_LARGE)
         response.statusCode = 431;
-    else if (result == HttpParser::TOO_LARGE
-        || parsed.getContentLength() > maxBody
-        || parsed.getBody().size() > maxBody)
+    else if (result == HttpParser::TOO_LARGE || parsed.getContentLength() > maxBody || parsed.getBody().size() > maxBody)
         response.statusCode = 413;
     else if (result == HttpParser::ERROR)
         response.statusCode = 400;
@@ -78,9 +77,10 @@ static bool processRequest(const std::string &raw, const ServerConfig &config, s
         context.query = parsed.getQuery();
         context.protocol = parsed.getVersion();
         const RequestHandler::CgiResult cgi = handler.prepareCgi(request, config, context, plan, response);
+
         if (cgi == RequestHandler::CGI_READY)
             return true;
-        // Failed preparation may have partially filled the plan. Never execute it.
+
         plan = CgiRequest();
         if (cgi == RequestHandler::CGI_NOT_SELECTED)
             response = handler.handleRequest(request, config);
@@ -105,7 +105,9 @@ int main(int argc, char **argv)
         network.setAsyncReqProcessor(processRequest, processCgiResponse);
         const std::vector<ServerConfig> &servers = config.getServers();
         for (std::size_t i = 0; i < servers.size(); ++i)
+        {
             network.addServer(servers[i]);
+        }
         network.initializeServers();
         network.run();
     }
@@ -116,7 +118,7 @@ int main(int argc, char **argv)
     }
     catch (...)
     {
-        std::cerr << "Unexpected startup failure" << std::endl;
+        std::cerr << "Unexpected WEBSERV failure" << std::endl;
         return 1;
     }
     return 0;

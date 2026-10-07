@@ -129,37 +129,61 @@ bool Client::receiveData()
                             break;
                         }
                         if (end - _chunkPos > MAX_HEADER_SIZE)
-                        { _requestError = 400; break; }
+                        {
+                            _requestError = 400;
+                            break;
+                        }
                         std::size_t limit = _readBuf.find(';', _chunkPos);
-                        if (limit == std::string::npos || limit > end) limit = end;
-                        if (limit == _chunkPos) { _requestError = 400; break; }
+                        if (limit == std::string::npos || limit > end)
+                            limit = end;
+                        if (limit == _chunkPos)
+                        {
+                            _requestError = 400;
+                            break;
+                        }
                         std::size_t count = 0;
                         for (std::size_t i = _chunkPos; i < limit; ++i)
                         {
                             const unsigned char c = static_cast<unsigned char>(_readBuf[i]);
-                            if (!std::isxdigit(c)) { _requestError = 400; break; }
+                            if (!std::isxdigit(c))
+                            {
+                                _requestError = 400;
+                                break;
+                            }
                             const std::size_t digit = c <= '9' ? c - '0' : std::tolower(c) - 'a' + 10;
                             if (count > (std::numeric_limits<std::size_t>::max() - digit) / 16)
-                            { _requestError = 400; break; }
+                            {
+                                _requestError = 400;
+                                break;
+                            }
                             count = count * 16 + digit;
                         }
-                        if (_requestError) break;
+                        if (_requestError)
+                            break;
                         _chunkSize = count;
                         _chunkPos = end + 2;
                         if (count > std::numeric_limits<std::size_t>::max() - _decodedBodySize)
-                        { _requestError = 400; break; }
-                        if (_configSelected
-                            && count > _config.getMaxBodySize() - _decodedBodySize)
-                        { _requestError = 413; break; }
+                        {
+                            _requestError = 400;
+                            break;
+                        }
+                        if (_configSelected && count > _config.getMaxBodySize() - _decodedBodySize)
+                        {
+                            _requestError = 413;
+                            break;
+                        }
                         _decodedBodySize += count;
                         _chunkState = count == 0 ? 2 : 1;
                     }
                     else if (_chunkState == 1) // chunk data and trailing CRLF
                     {
-                        if (_chunkSize > _readBuf.size() - _chunkPos
-                            || _readBuf.size() - _chunkPos - _chunkSize < 2) break;
+                        if (_chunkSize > _readBuf.size() - _chunkPos || _readBuf.size() - _chunkPos - _chunkSize < 2)
+                            break;
                         if (_readBuf.compare(_chunkPos + _chunkSize, 2, "\r\n") != 0)
-                        { _requestError = 400; break; }
+                        {
+                            _requestError = 400;
+                            break;
+                        }
                         _chunkPos += _chunkSize + 2;
                         _chunkState = 0;
                     }
@@ -173,7 +197,10 @@ bool Client::receiveData()
                             break;
                         }
                         if (end - _chunkPos > MAX_HEADER_SIZE)
-                        { _requestError = 400; break; }
+                        {
+                            _requestError = 400;
+                            break;
+                        }
                         _requestReady = end == _chunkPos;
                         _chunkPos = end + 2;
                     }
@@ -251,7 +278,10 @@ bool Client::sendData()
         const ssize_t sent = send(_fd, _emergencyResponse->data() + _emergencySent,
             _emergencyResponse->size() - _emergencySent, MSG_DONTWAIT);
         if (sent <= 0)
-        { set_closed(); return false; }
+        {
+            set_closed();
+            return false;
+        }
         _emergencySent += static_cast<std::size_t>(sent);
         _responsePending = _emergencySent < _emergencyResponse->size();
         update_last_activity();
@@ -303,14 +333,12 @@ bool Client::hasTimedOut(std::time_t now, int timeoutSeconds) const
 
 bool Client::hasRequestTimedOut(std::time_t now, int timeoutSeconds) const
 {
-    return !_requestComplete && !_requestError
-        && timeoutSeconds > 0 && std::difftime(now, _requestStartedAt) >= timeoutSeconds;
+    return (!_requestComplete && !_requestError && timeoutSeconds > 0 && std::difftime(now, _requestStartedAt) >= timeoutSeconds);
 }
 
 bool Client::hasDrainTimedOut(std::time_t now, int timeoutSeconds) const
 {
-    return _responsePending && timeoutSeconds > 0
-        && std::difftime(now, _responseQueuedAt) >= timeoutSeconds;
+    return (_responsePending && timeoutSeconds > 0 && std::difftime(now, _responseQueuedAt) >= timeoutSeconds);
 }
 
 bool Client::isClosed() const

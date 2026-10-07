@@ -66,8 +66,7 @@ bool ServerSocket::create()
     int reuseAddress = 1;
     if (setsockopt(_fd, SOL_SOCKET, SO_REUSEADDR, &reuseAddress, sizeof(reuseAddress)) == -1)
     {
-        std::cerr << "setsockopt(SO_REUSEADDR) failed for "
-                  << _host << ":" << _port << ": " << std::strerror(errno) << std::endl;
+        std::cerr << "setsockopt(SO_REUSEADDR) failed for " << _host << ":" << _port << ": " << std::strerror(errno) << std::endl;
         closeSocket();
         return false;
     }
