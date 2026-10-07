@@ -27,8 +27,7 @@ HTTPResponse RequestResources::handleGet(const HTTPRequest& request, const Locat
     RootedPath path;
     int status = 500;
     struct stat fileInfo;
-    if (!path.resolve(location.getRoot(), getRelativePath(request.uri, location), status)
-        || !path.inspect(fileInfo, status))
+    if (!path.resolve(location.getRoot(), getRelativePath(request.uri, location), status) || !path.inspect(fileInfo, status))
         return makeErrorResponse(status, "File access denied or unavailable");
     std::string filePath = buildFilePath(request.uri, location);
 
@@ -45,8 +44,7 @@ HTTPResponse RequestResources::handleGet(const HTTPRequest& request, const Locat
         {
             RootedPath indexPath;
             struct stat indexInfo;
-            if (indexPath.resolve(RootedPath::descriptorPath(path.targetFd()), location.getIndex(), status)
-                && indexPath.inspect(indexInfo, status) && S_ISREG(indexInfo.st_mode))
+            if (indexPath.resolve(RootedPath::descriptorPath(path.targetFd()), location.getIndex(), status) && indexPath.inspect(indexInfo, status) && S_ISREG(indexInfo.st_mode))
             {
                 path = indexPath;
                 filePath = joinPath(filePath, location.getIndex());
@@ -123,18 +121,19 @@ HTTPResponse RequestResources::handleGet(const HTTPRequest& request, const Locat
         filePath.compare(filePath.size() - extension.size(), extension.size(), extension) == 0)
         return makeErrorResponse(501, "501 CGI Integration Required");
 
-    // Open the pinned inode rather than reopening a replaceable request pathname.
     OwnedFd file(open(RootedPath::descriptorPath(path.targetFd()).c_str(), O_RDONLY | O_NONBLOCK));
     if (file.get() < 0)
         return makeErrorResponse(RootedPath::openErrorStatus(errno), "File access denied or unavailable");
     HTTPResponse response;
     char buffer[8192];
-    for (;;)
+    while (true)
     {
         // The inspected target is a regular disk file: poll readiness is exempt.
         const ssize_t count = read(file.get(), buffer, sizeof(buffer));
-        if (count < 0) return makeErrorResponse(500, "500 Internal Server Error");
-        if (count == 0) break;
+        if (count < 0)
+            return makeErrorResponse(500, "500 Internal Server Error");
+        if (count == 0)
+            break;
         response.body.append(buffer, static_cast<std::size_t>(count));
     }
     response.statusCode = 200;
@@ -152,13 +151,11 @@ HTTPResponse RequestResources::handlePost(const HTTPRequest& request, const Loca
     std::string relativePath = getRelativePath(request.uri, location);
     std::string data = request.body;
     std::map<std::string, std::string>::const_iterator type = request.headers.find("content-type");
-    if (type != request.headers.end() &&
-        MultipartUpload::lower(MultipartUpload::trim(type->second.substr(0, type->second.find(';')))) == "multipart/form-data")
+    if (type != request.headers.end() && MultipartUpload::lower(MultipartUpload::trim(type->second.substr(0, type->second.find(';')))) == "multipart/form-data")
     {
         MultipartUpload upload;
         if (!upload.parse(type->second, request.body))
             return makeErrorResponse(400, "400 Bad Request");
-        // Form uploads target the upload route itself; the filename comes from the form.
         if (!relativePath.empty())
             return makeErrorResponse(400, "400 Bad Request");
         relativePath = upload.filename;
@@ -195,10 +192,15 @@ HTTPResponse RequestResources::handlePost(const HTTPRequest& request, const Loca
         const std::size_t count = remaining < 8192 ? remaining : 8192;
         // Regular disk files are exempt from the subject's poll readiness requirement.
         const ssize_t result = write(fd, data.data() + written, count);
-        if (result <= 0) { failed = true; break; }
+        if (result <= 0)
+        {
+            failed = true;
+            break;
+        }
         written += static_cast<std::size_t>(result);
     }
-    if (close(file.release()) != 0) failed = true;
+    if (close(file.release()) != 0)
+        failed = true;
     if (failed)
     {
         std::remove(filePath.c_str());
@@ -219,14 +221,12 @@ HTTPResponse RequestResources::handleDelete(const HTTPRequest& request, const Lo
     RootedPath path;
     int status = 500;
     struct stat fileInfo;
-    if (!path.resolve(location.getRoot(), getRelativePath(request.uri, location), status)
-        || !path.inspect(fileInfo, status))
+    if (!path.resolve(location.getRoot(), getRelativePath(request.uri, location), status) || !path.inspect(fileInfo, status))
         return makeErrorResponse(status, "Delete path denied or unavailable");
 
     if (!S_ISREG(fileInfo.st_mode))
         return makeErrorResponse(403, "403 Forbidden");
 
-    // remove never follows the final symlink, and the parent descriptor is pinned.
     if (std::remove(path.entryPath().c_str()) != 0)
         return makeErrorResponse(500, "500 Internal Server Error");
 

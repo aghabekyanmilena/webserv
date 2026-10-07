@@ -1,5 +1,3 @@
 #include "CgiRequest.hpp"
 
-CgiRequest::CgiRequest()
-{
-}
+CgiRequest::CgiRequest() { }

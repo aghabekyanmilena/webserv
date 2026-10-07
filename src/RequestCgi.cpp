@@ -39,19 +39,30 @@ RequestCgi::CgiResult RequestCgi::prepareCgi(const HTTPRequest& originalRequest,
     plan = CgiRequest();
     HTTPRequest request = originalRequest;
     if (!decodeUriPath(originalRequest.uri, request.uri))
-    { error = makeErrorResponse(400, "400 Bad Request"); return CGI_ERROR; }
+    {
+        error = makeErrorResponse(400, "400 Bad Request");
+        return CGI_ERROR;
+    }
     if (!isPathSafe(request.uri))
-    { error = makeErrorResponse(403, "403 Forbidden"); return CGI_ERROR; }
+    {
+        error = makeErrorResponse(403, "403 Forbidden");
+        return CGI_ERROR;
+    }
     const Location* location = findLocation(request.uri, config);
-    if (location == NULL) return CGI_NOT_SELECTED;
+    if (location == NULL)
+        return CGI_NOT_SELECTED;
     const std::string& extension = location->getCgiExtension();
-    if (extension.empty() || location->hasRedirect()) return CGI_NOT_SELECTED;
-    const bool direct = request.uri.size() >= extension.size() &&
-        request.uri.compare(request.uri.size() - extension.size(), extension.size(), extension) == 0;
+    if (extension.empty() || location->hasRedirect())
+        return CGI_NOT_SELECTED;
+    const bool direct = request.uri.size() >= extension.size() && request.uri.compare(request.uri.size() - extension.size(), extension.size(), extension) == 0;
     const bool directoryRequest = !request.uri.empty() && request.uri[request.uri.size() - 1] == '/';
-    if (!direct && !directoryRequest) return CGI_NOT_SELECTED;
+    if (!direct && !directoryRequest)
+        return CGI_NOT_SELECTED;
     if (!isSupportedMethod(request.method))
-    { error = makeErrorResponse(501, "501 Not Implemented"); return CGI_ERROR; }
+    {
+        error = makeErrorResponse(501, "501 Not Implemented");
+        return CGI_ERROR;
+    }
     if (!isMethodAllowed(request.method, *location))
     {
         error = makeErrorResponse(405, "405 Method Not Allowed");
@@ -59,31 +70,37 @@ RequestCgi::CgiResult RequestCgi::prepareCgi(const HTTPRequest& originalRequest,
         return CGI_ERROR;
     }
     if (request.body.size() > config.getMaxBodySize())
-    { error = makeErrorResponse(413, "413 Payload Too Large"); return CGI_ERROR; }
+    {
+        error = makeErrorResponse(413, "413 Payload Too Large");
+        return CGI_ERROR;
+    }
     if (request.method != "GET" && request.method != "POST")
-    { error = makeErrorResponse(405, "405 Method Not Allowed"); error.headers["Allow"] = "GET, POST"; return CGI_ERROR; }
+    {
+        error = makeErrorResponse(405, "405 Method Not Allowed");
+        error.headers["Allow"] = "GET, POST";
+        return CGI_ERROR;
+    }
     plan.scriptPath = buildFilePath(request.uri, *location);
     std::string scriptName = originalRequest.uri;
     RootedPath script;
     int status = 500;
     struct stat info;
-    if (!script.resolve(location->getRoot(), getRelativePath(request.uri, *location), status)
-        || !script.inspect(info, status))
+    if (!script.resolve(location->getRoot(), getRelativePath(request.uri, *location), status) || !script.inspect(info, status))
     {
-        if (!direct) return CGI_NOT_SELECTED;
+        if (!direct)
+            return CGI_NOT_SELECTED;
         error = makeErrorResponse(status, "CGI path denied or unavailable"); return CGI_ERROR;
     }
     if (!direct)
     {
         const std::string& index = location->getIndex();
-        if (!S_ISDIR(info.st_mode) || index.size() < extension.size() ||
-            index.compare(index.size() - extension.size(), extension.size(), extension) != 0)
+        if (!S_ISDIR(info.st_mode) || index.size() < extension.size() || index.compare(index.size() - extension.size(), extension.size(), extension) != 0)
             return CGI_NOT_SELECTED;
         RootedPath indexed;
-        if (!indexed.resolve(RootedPath::descriptorPath(script.targetFd()), index, status)
-            || !indexed.inspect(info, status))
+        if (!indexed.resolve(RootedPath::descriptorPath(script.targetFd()), index, status) || !indexed.inspect(info, status))
         {
-            if (status == 404) return CGI_NOT_SELECTED;
+            if (status == 404)
+                return CGI_NOT_SELECTED;
             error = makeErrorResponse(status, "CGI index denied or unavailable"); return CGI_ERROR;
         }
         script = indexed;
@@ -91,16 +108,23 @@ RequestCgi::CgiResult RequestCgi::prepareCgi(const HTTPRequest& originalRequest,
         scriptName += encodeUriPath("/" + index).substr(1);
     }
     if (!S_ISREG(info.st_mode) || access(RootedPath::descriptorPath(script.targetFd()).c_str(), R_OK) != 0)
-    { error = makeErrorResponse(403, "403 Forbidden"); return CGI_ERROR; }
-    // Preserve both the script inode and its working directory until fork.
+    {
+        error = makeErrorResponse(403, "403 Forbidden");
+        return CGI_ERROR;
+    }
     plan.directory.reset(dup(script.parentFd()));
     plan.script.reset(dup(script.targetFd()));
     if (plan.directory.get() < 0 || plan.script.get() < 0)
-    { error = makeErrorResponse(500, "500 Internal Server Error"); return CGI_ERROR; }
+    {
+        error = makeErrorResponse(500, "500 Internal Server Error");
+        return CGI_ERROR;
+    }
     plan.interpreter = location->getCgiPath();
-    if (plan.interpreter.empty() || plan.interpreter[0] != '/' ||
-        access(plan.interpreter.c_str(), X_OK) != 0 || context.serverPort < 1 || context.serverPort > 65535)
-    { error = makeErrorResponse(500, "500 Internal Server Error"); return CGI_ERROR; }
+    if (plan.interpreter.empty() || plan.interpreter[0] != '/' || access(plan.interpreter.c_str(), X_OK) != 0 || context.serverPort < 1 || context.serverPort > 65535)
+    {
+        error = makeErrorResponse(500, "500 Internal Server Error");
+        return CGI_ERROR;
+    }
     plan.body = request.body;
     std::ostringstream length;
     length << request.body.size();
@@ -119,11 +143,9 @@ RequestCgi::CgiResult RequestCgi::prepareCgi(const HTTPRequest& originalRequest,
     plan.environment.push_back("CONTENT_LENGTH=" + length.str());
     std::map<std::string, std::string>::const_iterator contentType = request.headers.find("content-type");
     plan.environment.push_back("CONTENT_TYPE=" + (contentType == request.headers.end() ? "" : contentType->second));
-    for (std::map<std::string, std::string>::const_iterator it = request.headers.begin();
-         it != request.headers.end(); ++it)
+    for (std::map<std::string, std::string>::const_iterator it = request.headers.begin(); it != request.headers.end(); ++it)
     {
-        if (it->first == "content-type" || it->first == "content-length" ||
-            it->first == "transfer-encoding" || it->first == "connection" || it->first == "proxy")
+        if (it->first == "content-type" || it->first == "content-length" || it->first == "transfer-encoding" || it->first == "connection" || it->first == "proxy")
             continue;
         std::string key = "HTTP_";
         for (std::size_t i = 0; i < it->first.size(); ++i)
@@ -144,8 +166,12 @@ HTTPResponse RequestCgi::parseCgiOutput(const std::string& output) const
     std::size_t separator = 4;
     const std::size_t lfEnd = output.find("\n\n");
     if (lfEnd != std::string::npos && (end == std::string::npos || lfEnd < end))
-    { end = lfEnd; separator = 2; }
-    if (end == std::string::npos || end > 16384) return invalid;
+    {
+        end = lfEnd;
+        separator = 2;
+    }
+    if (end == std::string::npos || end > 16384)
+        return invalid;
     HTTPResponse response;
     response.body = output.substr(end + separator);
     std::map<std::string, std::string> fields;
@@ -154,9 +180,11 @@ HTTPResponse RequestCgi::parseCgiOutput(const std::string& output) const
     bool explicitStatus = false;
     while (std::getline(headers, line))
     {
-        if (!line.empty() && line[line.size() - 1] == '\r') line.erase(line.size() - 1);
+        if (!line.empty() && line[line.size() - 1] == '\r')
+            line.erase(line.size() - 1);
         const std::size_t colon = line.find(':');
-        if (colon == std::string::npos || colon == 0) return invalid;
+        if (colon == std::string::npos || colon == 0)
+            return invalid;
         std::string name = line.substr(0, colon);
         for (std::size_t i = 0; i < name.size(); ++i)
         {
@@ -173,39 +201,49 @@ HTTPResponse RequestCgi::parseCgiOutput(const std::string& output) const
         for (std::size_t i = 0; i < value.size(); ++i)
         {
             const unsigned char c = static_cast<unsigned char>(value[i]);
-            if ((c < 32 && c != '\t') || c == 127) return invalid;
+            if ((c < 32 && c != '\t') || c == 127)
+                return invalid;
         }
-        // HTTPResponse stores one value per header: reject duplicates instead of losing them.
         if (fields.count(name)) return invalid;
         fields[name] = value;
     }
     if (fields.count("status"))
     {
         const std::string& status = fields["status"];
-        if (status.size() < 3 || (status.size() > 3 && status[3] != ' ')) return invalid;
+        if (status.size() < 3 || (status.size() > 3 && status[3] != ' '))
+            return invalid;
         for (std::size_t i = 0; i < 3; ++i)
-            if (status[i] < '0' || status[i] > '9') return invalid;
+        {
+            if (status[i] < '0' || status[i] > '9')
+                return invalid;
+        }
         response.statusCode = (status[0] - '0') * 100 + (status[1] - '0') * 10 + status[2] - '0';
-        if (response.statusCode < 200 || response.statusCode > 599) return invalid;
+        if (response.statusCode < 200 || response.statusCode > 599)
+            return invalid;
         explicitStatus = true;
     }
-    if (!explicitStatus && fields.count("location")) response.statusCode = 302;
+    if (!explicitStatus && fields.count("location"))
+        response.statusCode = 302;
     if (fields.count("content-length"))
     {
         const std::string& length = fields["content-length"];
-        if (length.empty()) return invalid;
+        if (length.empty())
+            return invalid;
         std::size_t count = 0;
         for (std::size_t i = 0; i < length.size(); ++i)
         {
-            if (length[i] < '0' || length[i] > '9') return invalid;
+            if (length[i] < '0' || length[i] > '9')
+                return invalid;
             const std::size_t digit = length[i] - '0';
-            if (count > (std::numeric_limits<std::size_t>::max() - digit) / 10) return invalid;
+            if (count > (std::numeric_limits<std::size_t>::max() - digit) / 10)
+                return invalid;
             count = count * 10 + digit;
         }
-        if (count != response.body.size()) return invalid;
+        if (count != response.body.size())
+            return invalid;
     }
-    // CGI stdout is an unencoded entity body. Transfer coding is not supported here.
-    if (fields.count("transfer-encoding")) return invalid;
+    if (fields.count("transfer-encoding"))
+        return invalid;
     if (fields.count("connection"))
     {
         std::string tokens = fields["connection"];
@@ -216,11 +254,12 @@ HTTPResponse RequestCgi::parseCgiOutput(const std::string& output) const
         while (std::getline(list, token, ','))
         {
             const std::size_t first = token.find_first_not_of(" \t");
-            if (first == std::string::npos) continue;
+            if (first == std::string::npos)
+                continue;
             token = token.substr(first);
             token.erase(token.find_last_not_of(" \t") + 1);
-            // Do not let Connection change interpretation of CGI control fields.
-            if (token == "status" || token == "content-length" || token == "content-type") return invalid;
+            if (token == "status" || token == "content-length" || token == "content-type")
+                return invalid;
             fields.erase(token);
         }
     }
@@ -233,14 +272,16 @@ HTTPResponse RequestCgi::parseCgiOutput(const std::string& output) const
         bool capitalize = true;
         for (std::size_t i = 0; i < name.size(); ++i)
         {
-            if (capitalize) name[i] = static_cast<char>(std::toupper(static_cast<unsigned char>(name[i])));
+            if (capitalize)
+                name[i] = static_cast<char>(std::toupper(static_cast<unsigned char>(name[i])));
             capitalize = name[i] == '-';
         }
         response.headers[name] = it->second;
     }
-    if (response.statusCode == 204 || response.statusCode == 304) response.body.clear();
-    if (!response.headers.count("Content-Type") && !response.headers.count("Location") &&
-        response.statusCode != 204 && response.statusCode != 304) return invalid;
+    if (response.statusCode == 204 || response.statusCode == 304)
+        response.body.clear();
+    if (!response.headers.count("Content-Type") && !response.headers.count("Location") && response.statusCode != 204 && response.statusCode != 304)
+        return invalid;
     std::ostringstream length;
     length << response.body.size();
     response.headers["Content-Length"] = length.str();

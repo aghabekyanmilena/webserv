@@ -118,7 +118,22 @@ const std::string &Location::getUploadDirectory() const
 {
     return upload_directory;
 }
-void Location::setCgiExtension(const std::string &value) { cgi_extension = value; }
-void Location::setCgiPath(const std::string &value) { cgi_path = value; }
-const std::string &Location::getCgiExtension() const { return cgi_extension; }
-const std::string &Location::getCgiPath() const { return cgi_path; }
+void Location::setCgiExtension(const std::string &value)
+{
+    cgi_extension = value;
+}
+
+void Location::setCgiPath(const std::string &value)
+{
+    cgi_path = value;
+}
+
+const std::string &Location::getCgiExtension() const
+{
+    return cgi_extension;
+}
+
+const std::string &Location::getCgiPath() const
+{
+    return cgi_path;
+}

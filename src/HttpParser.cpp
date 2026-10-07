@@ -233,8 +233,7 @@ HttpParser::parse(const std::string &raw, HttpRequest &request, std::size_t maxB
     if (!parseHeaders(headers, request))
         return ERROR;
 
-    if (request.getVersion() == "HTTP/1.1"
-        && request.getHeaders().find("host") == request.getHeaders().end())
+    if (request.getVersion() == "HTTP/1.1"&& request.getHeaders().find("host") == request.getHeaders().end())
         return ERROR;
 
     std::string body = raw.substr(headerEnd + 4);
@@ -255,8 +254,7 @@ bool HttpParser::parseRequestLine(const std::string &line, HttpRequest &request)
     ss >> method >> target >> version;
 
     std::string extra;
-    if (method.empty() || target.empty() || target[0] != '/'
-        || version.empty() || (ss >> extra))
+    if (method.empty() || target.empty() || target[0] != '/' || version.empty() || (ss >> extra))
         return false;
 
     request.setMethod(method);
@@ -289,7 +287,6 @@ bool HttpParser::parseRequestLine(const std::string &line, HttpRequest &request)
 
     if (version != "HTTP/1.0" && version != "HTTP/1.1")
         return false;
-
     return true;
 }
 
@@ -349,8 +346,7 @@ bool HttpParser::parseHeaders(const std::string &headerBlock, HttpRequest &reque
 }
 
 HttpParser::ParseResult
-HttpParser::parseBody(const std::string &body, HttpRequest &request,
-                      std::size_t maxBodySize) const
+HttpParser::parseBody(const std::string &body, HttpRequest &request, std::size_t maxBodySize) const
 {
     const std::map<std::string, std::string> &headers = request.getHeaders();
     std::map<std::string, std::string>::const_iterator length = headers.find("content-length");
@@ -367,7 +363,7 @@ HttpParser::parseBody(const std::string &body, HttpRequest &request,
         request.setChunked(true);
         std::size_t pos = 0;
         std::string decoded;
-        for (;;)
+        while (true)
         {
             std::size_t end = body.find("\r\n", pos);
             if (end == std::string::npos)
@@ -430,6 +426,7 @@ HttpParser::parseBody(const std::string &body, HttpRequest &request,
             pos += count + 2;
         }
     }
+
     if (length == headers.end())
     {
         request.setBody("");
@@ -437,6 +434,7 @@ HttpParser::parseBody(const std::string &body, HttpRequest &request,
     }
     if (length->second.empty())
         return ERROR;
+
     std::size_t count = 0;
     for (std::size_t i = 0; i < length->second.size(); ++i)
     {
@@ -448,11 +446,13 @@ HttpParser::parseBody(const std::string &body, HttpRequest &request,
             return ERROR;
         count = count * 10 + digit;
     }
+
     request.setContentLength(count);
     if (count > maxBodySize)
         return TOO_LARGE;
     if (body.size() < count)
         return INCOMPLETE;
+
     request.setBody(body.substr(0, count));
     return COMPLETE;
 }
