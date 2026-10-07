@@ -6,7 +6,47 @@
 #include <iostream>
 #include <exception>
 
-static bool processRequest(const std::string &raw, const ServerConfig &config, std::string &serialized)
+static std::string serializeResponse(const HTTPResponse& response, const ServerConfig& config,
+    bool preserveBody = false)
+{
+	HttpResponse formatted;
+	if (preserveBody)
+	{
+		formatted.setStatusCode(response.statusCode);
+		formatted.setReasonPhrase(ResponseBuilder::reasonPhrase(response.statusCode));
+		formatted.setBody(response.body);
+	}
+	else
+		formatted = ResponseBuilder::makeError(response.statusCode, response.body, config);
+	for (std::map<std::string, std::string>::const_iterator it = response.headers.begin();
+		 it != response.headers.end(); ++it)
+		formatted.setHeader(it->first, it->second);
+	formatted.setHeader("Connection", "close");
+	return ResponseBuilder::serialize(formatted);
+}
+
+static std::string applicationPath(const std::string& decoded)
+{
+	// HttpParser already decoded the URI. Application APIs expect an encoded
+	// path and decode it once more; escape literal '%' to prevent double decoding.
+	std::string encoded;
+	for (std::size_t i = 0; i < decoded.size(); ++i)
+		if (decoded[i] == '%') encoded += "%25";
+		else encoded += decoded[i];
+	return encoded;
+}
+
+static std::string processCgiResponse(const std::string& output, const ServerConfig& config)
+{
+	RequestHandler handler;
+	const HTTPResponse response = handler.parseCgiOutput(output);
+	// Valid CGI output already supplies the entity body, including empty error
+	// bodies. Preserve it; malformed output follows the normal error-page path.
+	return serializeResponse(response, config, response.headers.count("Content-Length") != 0);
+}
+
+static bool processRequest(const std::string &raw, const ServerConfig &config, std::string &serialized,
+    CgiRequest& plan, const CgiContext& clientContext)
 {
 	HttpRequest parsed;
 	HttpParser parser;
@@ -29,26 +69,30 @@ static bool processRequest(const std::string &raw, const ServerConfig &config, s
 	{
 		HTTPRequest request;
 		request.method = parsed.getMethod();
-		request.uri = parsed.getPath();
+		request.uri = applicationPath(parsed.getPath());
 		request.query = parsed.getQuery();
 		request.body = parsed.getBody();
 		request.headers = parsed.getHeaders();
 		RequestHandler handler;
-		response = handler.handleRequest(request, config);
+		CgiContext context = clientContext;
+		context.query = parsed.getQuery();
+		context.protocol = parsed.getVersion();
+		const RequestHandler::CgiResult cgi = handler.prepareCgi(request, config, context, plan, response);
+		if (cgi == RequestHandler::CGI_READY)
+			return true;
+		// Failed preparation may have partially filled the plan. Never execute it.
+		plan = CgiRequest();
+		if (cgi == RequestHandler::CGI_NOT_SELECTED)
+			response = handler.handleRequest(request, config);
 	}
 
-	HttpResponse formatted = ResponseBuilder::makeError(response.statusCode, response.body, config);
-	for (std::map<std::string, std::string>::const_iterator it = response.headers.begin();
-		 it != response.headers.end(); ++it)
-		formatted.setHeader(it->first, it->second);
-	formatted.setHeader("Connection", "close");
-	serialized = ResponseBuilder::serialize(formatted);
+	serialized = serializeResponse(response, config);
 	return true;
 }
 
 int main(int argc, char **argv)
 {
-	if (argc != 2)
+	if (argc > 2)
 	{
 		std::cerr << "Usage: " << argv[0] << " [configuration file]" << std::endl;
 		return 1;
@@ -56,9 +100,9 @@ int main(int argc, char **argv)
 	try
 	{
 		Config config;
-		config.parseFile(argv[1]);
+		config.parseFile(argc == 2 ? argv[1] : "configs/webserv.conf");
 		NetworkManager network;
-		network.setRequestProcessor(processRequest);
+		network.setAsyncRequestProcessor(processRequest, processCgiResponse);
 		const std::vector<ServerConfig> &servers = config.getServers();
 		for (std::size_t i = 0; i < servers.size(); ++i)
 			network.addServer(servers[i]);
@@ -68,6 +112,11 @@ int main(int argc, char **argv)
 	catch (const std::exception &error)
 	{
 		std::cerr << error.what() << std::endl;
+		return 1;
+	}
+	catch (...)
+	{
+		std::cerr << "Unexpected startup failure" << std::endl;
 		return 1;
 	}
 	return 0;

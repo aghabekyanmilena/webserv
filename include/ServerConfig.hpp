@@ -15,6 +15,7 @@ private:
 	std::string host;
 	std::string server_name;
 	std::string root;
+	std::string index;
 
 public:
 	ServerConfig();
@@ -25,9 +26,11 @@ public:
 	void setHost(const std::string &value);
 	void setServerName(const std::string &value);
 	void setRoot(const std::string &value);
+	void setIndex(const std::string &value);
 	const std::string &getHost() const;
 	const std::string &getServerName() const;
 	const std::string &getRoot() const;
+	const std::string &getIndex() const;
 
 	void addListenPort(int port);
 	void addLocation(const Location &location);

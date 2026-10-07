@@ -6,19 +6,25 @@
 #include <limits>
 #include <cctype>
 
-const std::size_t MAX_HEADER_SIZE = 8192;
+static const std::size_t MAX_HEADER_SIZE = 8192;
 
-Client::Client(int fd) : _fd(fd), _listeningPort(-1), _config(), _readBuffer(), _writeBuffer(), _lastActivity(std::time(NULL)), _requestStartedAt(_lastActivity), _headerEnd(std::string::npos),
-    _bodyExpected(0), _chunkPos(0), _chunkSize(0),_decodedBodySize(0), _chunkState(0), _requestError(0), _chunked(false), _configSelected(false), _requestComplete(false), _requestReady(false), _responsePending(false), _closed(false)
-{ }
+Client::Client(int fd) : _fd(fd), _listeningPort(-1), _config(), _remoteAddr(), _readBuf(), _writeBuf(), _lastActivity(std::time(NULL)), _requestStartedAt(_lastActivity), _responseQueuedAt(0),
+    _emergencyResponse(NULL), _emergencySent(0), _headerEnd(std::string::npos), _bodyExpected(0), _chunkPos(0), _chunkSize(0), _decodedBodySize(0), _chunkState(0), _requestError(0), _chunked(false),
+    _configSelected(false), _requestComplete(false), _requestReady(false), _responsePending(false), _closed(false)
+{
+}
 
-Client::Client(int fd, const ServerConfig& config) : _fd(fd), _listeningPort(-1), _config(config), _readBuffer(), _writeBuffer(), _lastActivity(std::time(NULL)), _requestStartedAt(_lastActivity),
-    _headerEnd(std::string::npos), _bodyExpected(0), _chunkPos(0), _chunkSize(0), _decodedBodySize(0), _chunkState(0), _requestError(0), _chunked(false), _configSelected(true), _requestComplete(false), _requestReady(false), _responsePending(false), _closed(false)
-{ }
+Client::Client(int fd, const ServerConfig& config) : _fd(fd), _listeningPort(-1), _config(config), _remoteAddr(), _readBuf(), _writeBuf(), _lastActivity(std::time(NULL)), _requestStartedAt(_lastActivity),
+    _responseQueuedAt(0), _emergencyResponse(NULL), _emergencySent(0), _headerEnd(std::string::npos), _bodyExpected(0), _chunkPos(0), _chunkSize(0), _decodedBodySize(0), _chunkState(0), _requestError(0),
+    _chunked(false), _configSelected(true), _requestComplete(false), _requestReady(false), _responsePending(false), _closed(false)
+{
+}
 
-Client::Client(int fd, const ServerConfig& config, int listenPort) : _fd(fd), _listeningPort(listenPort), _config(config), _readBuffer(), _writeBuffer(), _lastActivity(std::time(NULL)),
-    _requestStartedAt(_lastActivity), _headerEnd(std::string::npos), _bodyExpected(0), _chunkPos(0), _chunkSize(0), _decodedBodySize(0), _chunkState(0), _requestError(0), _chunked(false), _configSelected(false), _requestComplete(false), _requestReady(false), _responsePending(false), _closed(false)
-{ }
+Client::Client(int fd, const ServerConfig& config, int listenPort) : _fd(fd), _listeningPort(listenPort), _config(config), _remoteAddr(), _readBuf(), _writeBuf(), _lastActivity(std::time(NULL)),
+    _requestStartedAt(_lastActivity), _responseQueuedAt(0), _emergencyResponse(NULL), _emergencySent(0), _headerEnd(std::string::npos), _bodyExpected(0), _chunkPos(0), _chunkSize(0), _decodedBodySize(0),
+    _chunkState(0), _requestError(0), _chunked(false), _configSelected(false), _requestComplete(false), _requestReady(false), _responsePending(false), _closed(false)
+{
+}
 
 Client::~Client() { }
 
@@ -47,19 +53,24 @@ void Client::setConfig(const ServerConfig& config)
         _requestError = 413;
 }
 
+void Client::setRemoteAddress(const std::string& address) { _remoteAddr = address; }
+const std::string& Client::getRemoteAddress() const { return _remoteAddr; }
+
 bool Client::receiveData()
 {
     // poll->POLLIN
 
     char buffer[8192];
-    const ssize_t bytesRead = recv(_fd, buffer, sizeof(buffer), 0);
+    const ssize_t bytesRead = recv(_fd, buffer, sizeof(buffer), MSG_DONTWAIT);
 
     if (bytesRead > 0)
     {
         try
         {
-            const std::size_t oldSize = _readBuffer.size();
-            _readBuffer.append(buffer, static_cast<std::string::size_type>(bytesRead));
+            if (_requestComplete)
+            { update_last_activity(); return true; }
+            const std::size_t oldSize = _readBuf.size();
+            _readBuf.append(buffer, static_cast<std::string::size_type>(bytesRead));
             if (_requestReady || _requestComplete || _requestError)
             {
                 update_last_activity();
@@ -69,10 +80,10 @@ bool Client::receiveData()
             if (_headerEnd == std::string::npos)
             {
                 const std::size_t searchFrom = oldSize > 3 ? oldSize - 3 : 0;
-                const std::size_t end = _readBuffer.find("\r\n\r\n", searchFrom);
+                const std::size_t end = _readBuf.find("\r\n\r\n", searchFrom);
                 if (end == std::string::npos)
                 {
-                    if (_readBuffer.size() > MAX_HEADER_SIZE)
+                    if (_readBuf.size() > MAX_HEADER_SIZE)
                         _requestError = 431;
                     update_last_activity();
                     return true;
@@ -86,7 +97,7 @@ bool Client::receiveData()
                 }
                 HttpParser parser;
                 HttpRequest request;
-                const HttpParser::ParseResult result = parser.parse(_readBuffer.substr(0, _headerEnd), request);
+                const HttpParser::ParseResult result = parser.parse(_readBuf.substr(0, _headerEnd), request);
                 if (result == HttpParser::ERROR)
                     _requestError = 400;
                 else
@@ -98,29 +109,29 @@ bool Client::receiveData()
             }
 
             if (_requestError == 0 && !_chunked)
-                _requestReady = _readBuffer.size() - _headerEnd >= _bodyExpected;
+                _requestReady = _readBuf.size() - _headerEnd >= _bodyExpected;
             else if (_requestError == 0)
             {
-                while (_chunkPos < _readBuffer.size() && !_requestReady && !_requestError)
+                while (_chunkPos < _readBuf.size() && !_requestReady && !_requestError)
                 {
                     if (_chunkState == 0) // chunk size line
                     {
-                        const std::size_t end = _readBuffer.find("\r\n", _chunkPos);
+                        const std::size_t end = _readBuf.find("\r\n", _chunkPos);
                         if (end == std::string::npos)
                         {
-                            if (_readBuffer.size() - _chunkPos > MAX_HEADER_SIZE)
+                            if (_readBuf.size() - _chunkPos > MAX_HEADER_SIZE)
                                 _requestError = 400;
                             break;
                         }
                         if (end - _chunkPos > MAX_HEADER_SIZE)
                         { _requestError = 400; break; }
-                        std::size_t limit = _readBuffer.find(';', _chunkPos);
+                        std::size_t limit = _readBuf.find(';', _chunkPos);
                         if (limit == std::string::npos || limit > end) limit = end;
                         if (limit == _chunkPos) { _requestError = 400; break; }
                         std::size_t count = 0;
                         for (std::size_t i = _chunkPos; i < limit; ++i)
                         {
-                            const unsigned char c = static_cast<unsigned char>(_readBuffer[i]);
+                            const unsigned char c = static_cast<unsigned char>(_readBuf[i]);
                             if (!std::isxdigit(c)) { _requestError = 400; break; }
                             const std::size_t digit = c <= '9' ? c - '0' : std::tolower(c) - 'a' + 10;
                             if (count > (std::numeric_limits<std::size_t>::max() - digit) / 16)
@@ -140,19 +151,19 @@ bool Client::receiveData()
                     }
                     else if (_chunkState == 1) // chunk data and trailing CRLF
                     {
-                        if (_chunkSize > _readBuffer.size() - _chunkPos
-                            || _readBuffer.size() - _chunkPos - _chunkSize < 2) break;
-                        if (_readBuffer.compare(_chunkPos + _chunkSize, 2, "\r\n") != 0)
+                        if (_chunkSize > _readBuf.size() - _chunkPos
+                            || _readBuf.size() - _chunkPos - _chunkSize < 2) break;
+                        if (_readBuf.compare(_chunkPos + _chunkSize, 2, "\r\n") != 0)
                         { _requestError = 400; break; }
                         _chunkPos += _chunkSize + 2;
                         _chunkState = 0;
                     }
                     else // trailer lines, ending in an empty line
                     {
-                        const std::size_t end = _readBuffer.find("\r\n", _chunkPos);
+                        const std::size_t end = _readBuf.find("\r\n", _chunkPos);
                         if (end == std::string::npos)
                         {
-                            if (_readBuffer.size() - _chunkPos > MAX_HEADER_SIZE)
+                            if (_readBuf.size() - _chunkPos > MAX_HEADER_SIZE)
                                 _requestError = 400;
                             break;
                         }
@@ -173,38 +184,39 @@ bool Client::receiveData()
         return true;
     }
 
-    /* bytesRead == 0: orderly peer shutdown.  bytesRead < 0: I/O failed.
-     * We do not inspect errno after recv(), as required by the subject. */
     set_closed();
     return false;
 }
 
 bool Client::isRequestReady() const { return _requestReady; }
+
 int Client::getRequestError() const { return _requestError; }
+
 void Client::setRequestComplete() { _requestComplete = true; }
+
 bool Client::isIdle() const { return !_responsePending && !_requestReady && !_requestComplete; }
 
 const std::string& Client::getReadBuffer() const
 {
-    return _readBuffer;
+    return _readBuf;
 }
 
 void Client::clearReadBuffer()
 {
-    _readBuffer.clear();
+    _readBuf.clear();
 }
 
 void Client::setResponse(const std::string& response)
 {
-    if (_closed || response.empty())
+    if (_closed || response.empty() || _emergencyResponse != NULL)
         return;
 
     try
     {
-        /* Append instead of replacing so a partially-sent response cannot be
-         * corrupted if the application queues more output for this client. */
-        _writeBuffer.append(response);
-        _responsePending = !_writeBuffer.empty();
+        if (!_responsePending)
+            _responseQueuedAt = std::time(NULL);
+        _writeBuf.append(response);
+        _responsePending = !_writeBuf.empty();
     }
     catch (...)
     {
@@ -212,29 +224,51 @@ void Client::setResponse(const std::string& response)
     }
 }
 
+void Client::setEmergencyResponse(const std::string& response)
+{
+    if (_closed || _responsePending || response.empty())
+        return;
+    _emergencyResponse = &response;
+    _emergencySent = 0;
+    _responseQueuedAt = std::time(NULL);
+    _responsePending = true;
+    _requestComplete = true;
+}
+
 bool Client::sendData()
 {
-    /* PRECONDITION: call only after poll() reports POLLOUT. */
+    // poll->POLLOUT
     if (_closed)
         return false;
 
-    if (_writeBuffer.empty())
+    if (_emergencyResponse != NULL)
+    {
+        const ssize_t sent = send(_fd, _emergencyResponse->data() + _emergencySent,
+            _emergencyResponse->size() - _emergencySent, MSG_DONTWAIT);
+        if (sent <= 0)
+        { set_closed(); return false; }
+        _emergencySent += static_cast<std::size_t>(sent);
+        _responsePending = _emergencySent < _emergencyResponse->size();
+        update_last_activity();
+        return true;
+    }
+
+    if (_writeBuf.empty())
     {
         _responsePending = false;
         return true;
     }
 
-    const ssize_t bytesSent = send(_fd, _writeBuffer.data(), _writeBuffer.size(), 0);
+    const ssize_t bytesSent = send(_fd, _writeBuf.data(), _writeBuf.size(), MSG_DONTWAIT);
 
     if (bytesSent > 0)
     {
-        _writeBuffer.erase(0, static_cast<std::string::size_type>(bytesSent));
-        _responsePending = !_writeBuffer.empty();
+        _writeBuf.erase(0, static_cast<std::string::size_type>(bytesSent));
+        _responsePending = !_writeBuf.empty();
         update_last_activity();
         return true;
     }
 
-    /* Do not inspect errno after send(), per the subject. */
     set_closed();
     return false;
 }
@@ -268,6 +302,12 @@ bool Client::hasRequestTimedOut(std::time_t now, int timeoutSeconds) const
         && timeoutSeconds > 0 && std::difftime(now, _requestStartedAt) >= timeoutSeconds;
 }
 
+bool Client::hasDrainTimedOut(std::time_t now, int timeoutSeconds) const
+{
+    return _responsePending && timeoutSeconds > 0
+        && std::difftime(now, _responseQueuedAt) >= timeoutSeconds;
+}
+
 bool Client::isClosed() const
 {
     return _closed;
@@ -289,6 +329,7 @@ void Client::closeConnection()
 
     _closed = true;
     _responsePending = false;
-    _readBuffer.clear();
-    _writeBuffer.clear();
+    _emergencyResponse = NULL;
+    _readBuf.clear();
+    _writeBuf.clear();
 }

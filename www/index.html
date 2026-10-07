@@ -1,9 +1,20 @@
-<!DOCTYPE html>
-<html><head><title>webserv</title></head>
-<body><h1>webserv</h1><p>Static site root.</p>
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Webserv application demo</title></head>
+<body>
+<h1>Arina's Webserv application demo</h1>
 <ul>
-<li><a href="/files/">/files</a></li>
-<li><a href="/upload/">/upload</a></li>
-<li><a href="/cgi-bin/hello.py">/cgi-bin/hello.py</a></li>
+<li><a href="/files/">Directory listing</a></li>
+<li><a href="/files/example.txt">Static file</a></li>
+<li><a href="/upload/">Uploaded files</a></li>
+<li><a href="/old-page">Redirection</a></li>
+<li><a href="/upload.html">Upload, DELETE, and CGI demonstrations</a></li>
 </ul>
-</body></html>
+<h2>Upload one file</h2>
+<p>Choose a new filename. Existing files are protected from overwriting.</p>
+<form action="/upload" method="post" enctype="multipart/form-data">
+<label>File <input type="file" name="file" required></label>
+<button type="submit">Upload</button>
+</form>
+</body>
+</html>

@@ -7,16 +7,20 @@
 #include <stdexcept>
 #include <unistd.h>
 #include <cctype>
-#include <fcntl.h>
+#include <new>
+#include <sstream>
 
-namespace
+static std::string errorResponse(int status, const ServerConfig& config)
 {
-	std::string errorResponse(int status, const ServerConfig& config)
-	{
-		HttpResponse response = ResponseBuilder::makeError(status, "", config);
-		response.setHeader("Connection", "close");
-		return ResponseBuilder::serialize(response);
-	}
+#ifdef WEBSERV_FAULT_INJECT
+	(void)status;
+	(void)config;
+	throw std::bad_alloc();
+#else
+	HttpResponse response = ResponseBuilder::makeError(status, "", config);
+	response.setHeader("Connection", "close");
+	return ResponseBuilder::serialize(response);
+#endif
 }
 
 volatile sig_atomic_t NetworkManager::_stopRequested = 0;
@@ -36,7 +40,9 @@ static bool sameText(const std::string& left, const std::string& right)
 
 NetworkManager::NetworkManager()
     : _servers(), _serverConfigs(), _clients(), _pollFds(), _extraFds(),
-      _connectionTimeout(30), _listenersPausedUntil(0), _requestProcessor(NULL)
+      _connectionTimeout(30), _drainTimeout(5), _fallback408(), _fallback500(),
+      _listenersPausedUntil(0), _requestProcessor(NULL),
+      _asyncRequestProcessor(NULL), _cgiResponseProcessor(NULL), _cgiJobs()
 {
 	signal(SIGPIPE, SIG_IGN);
 	signal(SIGINT, &NetworkManager::handleSignal);
@@ -57,6 +63,13 @@ void NetworkManager::handleSignal(int signalNumber)
 void NetworkManager::setRequestProcessor(RequestProcessor processor)
 {
 	_requestProcessor = processor;
+}
+
+void NetworkManager::setAsyncRequestProcessor(AsyncRequestProcessor processor,
+    CgiResponseProcessor responseProcessor)
+{
+	_asyncRequestProcessor = processor;
+	_cgiResponseProcessor = responseProcessor;
 }
 
 void NetworkManager::addServer(const std::string& host, int port)
@@ -108,6 +121,12 @@ void NetworkManager::addServer(const ServerConfig& config)
 
 void NetworkManager::initializeServers()
 {
+	_fallback408.reserve(128);
+	_fallback408 = "HTTP/1.1 408 Request Timeout\r\n"
+		"Connection: close\r\nContent-Length: 0\r\n\r\n";
+	_fallback500.reserve(128);
+	_fallback500 = "HTTP/1.1 500 Internal Server Error\r\n"
+		"Connection: close\r\nContent-Length: 0\r\n\r\n";
 	bool active = false;
 	for (std::vector<ServerSocket>::iterator it = _servers.begin();
 		 it != _servers.end(); ++it)
@@ -142,24 +161,36 @@ void NetworkManager::run()
 	_stopRequested = 0;
 	while (!_stopRequested)
 	{
-		buildPollFds();
-		if (_pollFds.empty())
+		try
 		{
-			bool hasListener = false;
-			for (std::size_t i = 0; i < _servers.size(); ++i)
-				hasListener = hasListener || _servers[i].getFd() != -1;
-			if (!hasListener && _clients.empty() && _extraFds.empty())
-				throw std::runtime_error("No active listening sockets or clients");
-			poll(NULL, 0, 1000);
+			buildPollFds();
+			if (_pollFds.empty())
+			{
+				bool hasListener = false;
+				for (std::size_t i = 0; i < _servers.size(); ++i)
+					hasListener = hasListener || _servers[i].getFd() != -1;
+				// Drain remaining clients/jobs after listener loss. Once all are
+				// gone, return deliberately instead of throwing a runtime error.
+				if (!hasListener && _clients.empty() && _extraFds.empty())
+					break;
+				poll(NULL, 0, 100);
+				checkCgiJobs();
+				checkTimeouts();
+				continue;
+			}
+
+			const int readyCount = poll(&_pollFds[0], _pollFds.size(), 1000);
+			if (readyCount > 0)
+				processEvents();
+
+			checkCgiJobs();
 			checkTimeouts();
-			continue;
 		}
-
-		const int readyCount = poll(&_pollFds[0], _pollFds.size(), 1000);
-		if (readyCount > 0)
-			processEvents();
-
-		checkTimeouts();
+		catch (...)
+		{
+			// Last-resort protection; persistent failures must not busy-spin.
+			poll(NULL, 0, 100);
+		}
 	}
 }
 
@@ -206,8 +237,9 @@ void NetworkManager::buildPollFds()
     }
     catch (...)
     {
-        /* Keep the previous valid poll set if rebuilding it runs out of
-         * resources.  The next loop iteration can try rebuilding again. */
+        // Old descriptors may have been closed/recycled. Never poll stale
+        // entries: run() sleeps briefly and retries an empty set instead.
+        _pollFds.clear();
         return;
     }
 
@@ -235,62 +267,103 @@ void NetworkManager::processEvents()
 				serverIt->closeSocket();
 				break;
 			}
-			if (pollIt->revents & POLLIN)
-				handleNewConnection(*serverIt);
+			try
+			{
+				if (pollIt->revents & POLLIN)
+					handleNewConnection(*serverIt);
+			}
+			catch (...)
+			{
+				// Failure to accept one client must not close the listener.
+			}
 			break;
 		}
 
 		if (listenerFound)
 			continue;
 
-		std::map<int, ExtraFd>::iterator extraIt = _extraFds.find(pollIt->fd);
-		if (extraIt != _extraFds.end())
+		try
 		{
-			ExtraFd::Callback callback = extraIt->second.callback;
-			void *context = extraIt->second.context;
-			if (callback != NULL)
-				callback(pollIt->fd, pollIt->revents, context);
-			continue;
+			std::map<int, ExtraFd>::iterator extraIt = _extraFds.find(pollIt->fd);
+			if (extraIt != _extraFds.end())
+			{
+				ExtraFd::Callback callback = extraIt->second.callback;
+				void *context = extraIt->second.context;
+				try
+				{
+					if (callback != NULL)
+						callback(pollIt->fd, pollIt->revents, context);
+				}
+				catch (...)
+				{
+					removeExtraFd(pollIt->fd);
+					// Owner cleanup hook: a failed CGI callback cancels its child
+					// and both pipes; checkCgiJobs() delivers its error response.
+					failCgiFd(pollIt->fd);
+				}
+				continue;
+			}
+
+			std::map<int, Client>::iterator clientIt = _clients.find(pollIt->fd);
+			if (clientIt == _clients.end())
+				continue;
+
+			if (pollIt->revents & (POLLERR | POLLNVAL))
+			{
+				removeClient(pollIt->fd);
+				continue;
+			}
+
+			if (pollIt->revents & POLLIN)
+				handleClientRead(pollIt->fd);
+
+			clientIt = _clients.find(pollIt->fd);
+			if (clientIt == _clients.end())
+				continue;
+
+			if (pollIt->revents & POLLHUP)
+			{
+				removeClient(pollIt->fd);
+				continue;
+			}
+
+			if (pollIt->revents & POLLOUT)
+				handleClientWrite(pollIt->fd);
 		}
-
-		std::map<int, Client>::iterator clientIt = _clients.find(pollIt->fd);
-		if (clientIt == _clients.end())
-			continue;
-
-		if (pollIt->revents & (POLLERR | POLLNVAL))
+		catch (...)
 		{
 			removeClient(pollIt->fd);
-			continue;
 		}
-
-		if (pollIt->revents & POLLIN)
-			handleClientRead(pollIt->fd);
-
-		clientIt = _clients.find(pollIt->fd);
-		if (clientIt == _clients.end())
-			continue;
-
-		if (pollIt->revents & POLLHUP)
-		{
-			removeClient(pollIt->fd);
-			continue;
-		}
-
-		if (pollIt->revents & POLLOUT)
-			handleClientWrite(pollIt->fd);
 	}
 }
 
 void NetworkManager::handleNewConnection(ServerSocket& server)
 {
-	const int clientFd = server.acceptClient();
+	struct sockaddr_in peer;
+	const int clientFd = server.acceptClient(&peer);
 	if (clientFd == -1)
 	{
 		_listenersPausedUntil = std::time(NULL) + 2;
 		shedIdleClients();
 		return;
 	}
-	addClient(clientFd, server.getConfig(), server.getPort());
+	try
+	{
+		const unsigned long address = ntohl(peer.sin_addr.s_addr);
+		std::ostringstream text;
+		text << ((address >> 24) & 255) << '.' << ((address >> 16) & 255)
+			<< '.' << ((address >> 8) & 255) << '.' << (address & 255);
+		const std::string remoteAddress = text.str();
+		// getConfig() returns a reference. Copies stay inside addClient's guard.
+		addClient(clientFd, server.getConfig(), server.getPort());
+		std::map<int, Client>::iterator it = _clients.find(clientFd);
+		if (it != _clients.end()) it->second.setRemoteAddress(remoteAddress);
+	}
+	catch (...)
+	{
+		if (_clients.find(clientFd) != _clients.end()) removeClient(clientFd);
+		else close(clientFd);
+	}
 }
 
 std::string NetworkManager::normalizeHost(const std::string& host)
@@ -382,6 +455,8 @@ void NetworkManager::handleClientRead(int clientFd)
 		removeClient(clientFd);
 		return;
 	}
+	if (_cgiJobs.find(clientFd) != _cgiJobs.end())
+		return;
 
 	try
 	{
@@ -402,15 +477,44 @@ void NetworkManager::handleClientRead(int clientFd)
 			sendResponse(clientFd, errorResponse(it->second.getRequestError(), selected));
 			return;
 		}
-		if (_requestProcessor == NULL || !it->second.isRequestReady())
+		if ((_requestProcessor == NULL && _asyncRequestProcessor == NULL)
+			|| !it->second.isRequestReady())
 			return;
 
 		std::string response;
-		if (_requestProcessor(it->second.getReadBuffer(), selected, response))
+		CgiRequest plan;
+		CgiContext context;
+		context.serverPort = it->second.getListeningPort();
+		context.remoteAddress = it->second.getRemoteAddress();
+		const bool complete = _asyncRequestProcessor != NULL
+			? _asyncRequestProcessor(it->second.getReadBuffer(), selected, response, plan, context)
+			: _requestProcessor(it->second.getReadBuffer(), selected, response);
+		if (complete)
 		{
 			it->second.clearReadBuffer();
-			sendResponse(clientFd, response);
+			it->second.setRequestComplete();
+			if (!plan.interpreter.empty()) startCgi(clientFd, plan);
+			else sendResponse(clientFd, response);
 		}
+	}
+	catch (...)
+	{
+		sendFallbackResponse(clientFd, _fallback500);
+	}
+}
+
+void NetworkManager::handleClientWrite(int clientFd)
+{
+	try
+	{
+		std::map<int, Client>::iterator it = _clients.find(clientFd);
+		if (it == _clients.end())
+			return;
+
+		if (!it->second.sendData()
+			|| ((_requestProcessor != NULL || _asyncRequestProcessor != NULL)
+				&& !it->second.hasPendingResponse()))
+			removeClient(clientFd);
 	}
 	catch (...)
 	{
@@ -418,20 +522,10 @@ void NetworkManager::handleClientRead(int clientFd)
 	}
 }
 
-void NetworkManager::handleClientWrite(int clientFd)
-{
-	std::map<int, Client>::iterator it = _clients.find(clientFd);
-	if (it == _clients.end())
-		return;
-
-	if (!it->second.sendData()
-		|| (_requestProcessor != NULL && !it->second.hasPendingResponse()))
-		removeClient(clientFd);
-}
-
 void NetworkManager::addClient(int clientFd)
 {
-	addClient(clientFd, ServerConfig(), -1);
+	try { addClient(clientFd, ServerConfig(), -1); }
+	catch (...) { if (clientFd >= 0) close(clientFd); }
 }
 
 void NetworkManager::addClient(int clientFd, const ServerConfig& config)
@@ -460,9 +554,13 @@ void NetworkManager::addClient(int clientFd, const ServerConfig& config, int lis
 
 void NetworkManager::removeClient(int clientFd)
 {
+	cancelCgi(clientFd);
 	std::map<int, Client>::iterator it = _clients.find(clientFd);
 	if (it == _clients.end())
 		return;
+	// Invalidate readiness in this snapshot before fd numbers can be reused.
+	for (std::size_t i = 0; i < _pollFds.size(); ++i)
+		if (_pollFds[i].fd == clientFd) _pollFds[i].revents = 0;
 	it->second.closeConnection();
 	_clients.erase(it);
 }
@@ -470,36 +568,31 @@ void NetworkManager::removeClient(int clientFd)
 void NetworkManager::checkTimeouts()
 {
 	const std::time_t now = std::time(NULL);
-	std::vector<int> timedOutClients;
-	std::vector<int> incompleteClients;
-
-    try
-    {
-        for (std::map<int, Client>::const_iterator it = _clients.begin();
-             it != _clients.end(); ++it)
-        {
-            if (it->second.hasRequestTimedOut(now, _connectionTimeout))
-                incompleteClients.push_back(it->first);
-            else if (it->second.hasTimedOut(now, _connectionTimeout))
-                timedOutClients.push_back(it->first);
-        }
-    }
-    catch (...)
-    {
-        return;
-    }
-
-	for (std::vector<int>::const_iterator it = incompleteClients.begin();
-		 it != incompleteClients.end(); ++it)
+	// Advance before servicing each client: removal is safe and collecting
+	// descriptor vectors cannot itself fail during memory exhaustion.
+	for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); )
 	{
-		std::map<int, Client>::iterator clientIt = _clients.find(*it);
-		if (clientIt != _clients.end())
-			sendResponse(*it, errorResponse(408, clientIt->second.getConfig()));
+		const int fd = it->first;
+		Client& client = it->second;
+		++it;
+		try
+		{
+			if (client.hasPendingResponse())
+			{
+				if (client.hasDrainTimedOut(now, _drainTimeout)) removeClient(fd);
+			}
+			else if (client.hasRequestTimedOut(now, _connectionTimeout))
+			{
+				try { sendResponse(fd, errorResponse(408, client.getConfig())); }
+				catch (...) { sendFallbackResponse(fd, _fallback408); }
+			}
+			else if (client.hasTimedOut(now, _connectionTimeout)) removeClient(fd);
+		}
+		catch (...)
+		{
+			try { removeClient(fd); } catch (...) {}
+		}
 	}
-
-	for (std::vector<int>::const_iterator it = timedOutClients.begin();
-		 it != timedOutClients.end(); ++it)
-		removeClient(*it);
 }
 
 void NetworkManager::shedIdleClients()
@@ -552,24 +645,170 @@ void NetworkManager::sendResponse(int clientFd, const std::string& response)
 		removeClient(clientFd);
 }
 
-void NetworkManager::addExtraFd(int fd, short events, ExtraFd::Callback callback, void *context)
+void NetworkManager::sendFallbackResponse(int clientFd, const std::string& response)
+{
+	std::map<int, Client>::iterator it = _clients.find(clientFd);
+	if (it != _clients.end())
+		it->second.setEmergencyResponse(response);
+}
+
+bool NetworkManager::addExtraFd(int fd, short events, ExtraFd::Callback callback, void *context)
 {
 	if (fd < 0 || callback == NULL)
-		return;
-	if (fcntl(fd, F_SETFL, O_NONBLOCK) == -1)
-		return;
-	_extraFds[fd] = ExtraFd(fd, events, callback, context);
+		return false;
+	try { _extraFds[fd] = ExtraFd(fd, events, callback, context); }
+	catch (...) { return false; }
+	return true;
 }
 
 void NetworkManager::removeExtraFd(int fd)
 {
+	for (std::size_t i = 0; i < _pollFds.size(); ++i)
+		if (_pollFds[i].fd == fd) _pollFds[i].revents = 0;
 	std::map<int, ExtraFd>::iterator it = _extraFds.find(fd);
 	if (it != _extraFds.end())
 		_extraFds.erase(it);
 }
 
+void NetworkManager::startCgi(int clientFd, const CgiRequest& plan)
+{
+	std::vector<int> inheritedFds;
+	for (std::size_t i = 0; i < _servers.size(); ++i)
+		if (_servers[i].getFd() >= 0) inheritedFds.push_back(_servers[i].getFd());
+	for (std::map<int, Client>::const_iterator it = _clients.begin(); it != _clients.end(); ++it)
+		inheritedFds.push_back(it->first);
+	for (std::map<int, ExtraFd>::const_iterator it = _extraFds.begin(); it != _extraFds.end(); ++it)
+		inheritedFds.push_back(it->first);
+
+	CgiJob* job = new CgiJob;
+	bool registered = false;
+	try
+	{
+		registered = _cgiJobs.insert(std::make_pair(clientFd, job)).second;
+		if (!registered)
+		{ delete job; return; }
+		if (!job->process.start(plan.interpreter, plan.scriptPath, plan.environment,
+			plan.body, inheritedFds, 5, plan.directory.get(), plan.script.get()))
+		{
+			cancelCgi(clientFd);
+			sendResponse(clientFd, errorResponse(500, _clients.find(clientFd)->second.getConfig()));
+			return;
+		}
+		job->inputFd = job->process.inputFd();
+		job->outputFd = job->process.outputFd();
+		if ((job->inputFd >= 0 && !addExtraFd(job->inputFd, POLLOUT, &NetworkManager::cgiCallback, this))
+			|| !addExtraFd(job->outputFd, POLLIN, &NetworkManager::cgiCallback, this))
+		{
+			cancelCgi(clientFd);
+			sendFallbackResponse(clientFd, _fallback500);
+		}
+	}
+	catch (...)
+	{
+		if (registered) cancelCgi(clientFd);
+		else delete job;
+		sendFallbackResponse(clientFd, _fallback500);
+	}
+}
+
+void NetworkManager::cancelCgi(int clientFd)
+{
+	std::map<int, CgiJob*>::iterator it = _cgiJobs.find(clientFd);
+	if (it == _cgiJobs.end()) return;
+	removeExtraFd(it->second->inputFd);
+	removeExtraFd(it->second->outputFd);
+	delete it->second; // Cancels the child and schedules a nonblocking reap.
+	_cgiJobs.erase(it);
+}
+
+void NetworkManager::refreshCgiFds(CgiJob& job)
+{
+	if (job.inputFd >= 0 && job.process.inputFd() != job.inputFd)
+	{ removeExtraFd(job.inputFd); job.inputFd = -1; }
+	if (job.outputFd >= 0 && job.process.outputFd() != job.outputFd)
+	{ removeExtraFd(job.outputFd); job.outputFd = -1; }
+}
+
+void NetworkManager::cgiCallback(int fd, short events, void* context)
+{
+	static_cast<NetworkManager*>(context)->handleCgiEvent(fd, events);
+}
+
+void NetworkManager::handleCgiEvent(int fd, short events)
+{
+	for (std::map<int, CgiJob*>::iterator it = _cgiJobs.begin(); it != _cgiJobs.end(); ++it)
+	{
+		CgiJob& job = *it->second;
+		if (fd == job.inputFd)
+		{
+			if (events & (POLLERR | POLLHUP | POLLNVAL)) job.process.onPipeError();
+			else if (events & POLLOUT) job.process.onWritable();
+		}
+		else if (fd == job.outputFd)
+		{
+			if (events & (POLLERR | POLLNVAL)) job.process.onPipeError();
+			else if (events & POLLIN) job.process.onReadable();
+			else if (events & POLLHUP) job.process.onOutputHangup();
+		}
+		else continue;
+		refreshCgiFds(job);
+		return;
+	}
+}
+
+void NetworkManager::failCgiFd(int fd)
+{
+	for (std::map<int, CgiJob*>::iterator it = _cgiJobs.begin(); it != _cgiJobs.end(); ++it)
+		if (it->second->inputFd == fd || it->second->outputFd == fd)
+		{
+			it->second->process.onPipeError();
+			refreshCgiFds(*it->second);
+			return;
+		}
+}
+
+void NetworkManager::checkCgiJobs()
+{
+	const std::time_t now = std::time(NULL);
+	for (std::map<int, CgiJob*>::iterator it = _cgiJobs.begin(); it != _cgiJobs.end(); )
+	{
+		const int clientFd = it->first;
+		CgiJob& job = *it->second;
+		++it;
+		try
+		{
+			job.process.tick(now);
+			refreshCgiFds(job);
+			if (!job.process.finished() && !job.process.errorStatus()) continue;
+			const ServerConfig* config = getClientConfig(clientFd);
+			if (config != NULL)
+			{
+				const std::string response = job.process.errorStatus() || _cgiResponseProcessor == NULL
+					? errorResponse(job.process.errorStatus() ? job.process.errorStatus() : 500, *config)
+					: _cgiResponseProcessor(job.process.output(), *config);
+				sendResponse(clientFd, response);
+			}
+			cancelCgi(clientFd);
+		}
+		catch (...)
+		{
+			cancelCgi(clientFd);
+			sendFallbackResponse(clientFd, _fallback500);
+		}
+	}
+	CgiProcess::reapAbandoned();
+}
+
 void NetworkManager::shutdown()
 {
+	while (!_cgiJobs.empty()) cancelCgi(_cgiJobs.begin()->first);
+	// Cancelled children may need a scheduling tick before waitpid can reap.
+	// Bound shutdown and use only nonblocking waits.
+	for (int i = 0; i < 10; ++i)
+	{
+		CgiProcess::reapAbandoned();
+		poll(NULL, 0, 10);
+	}
 	for (std::map<int, Client>::iterator it = _clients.begin();
 		 it != _clients.end(); ++it)
 		it->second.closeConnection();

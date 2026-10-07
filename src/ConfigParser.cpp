@@ -191,6 +191,8 @@ ServerConfig ConfigParser::server()
 			server.setServerName(arg);
 		else if (key == "root")
 			server.setRoot(arg);
+		else if (key == "index")
+			server.setIndex(arg);
 		else if (key == "client_max_body_size")
 			server.setMaxBodySize(number(arg, std::numeric_limits<size_t>::max()));
 		else if (key == "error_page")
@@ -209,12 +211,13 @@ ServerConfig ConfigParser::server()
 	expect("}");
 	if (server.getListeningPorts().empty())
 		fail("server requires a listen directive");
-	// Apply server root after the complete block, regardless of directive order.
-	// Rebuild locations so callers receive their effective roots.
+	// Apply server defaults after the complete block, regardless of directive
+	// order. Locations keep explicit overrides for both root and index.
 	ServerConfig result;
 	result.setHost(server.getHost());
 	result.setServerName(server.getServerName());
 	result.setRoot(server.getRoot());
+	result.setIndex(server.getIndex());
 	result.setMaxBodySize(server.getMaxBodySize());
 	for (size_t i = 0; i < server.getListeningPorts().size(); ++i)
 		result.addListenPort(server.getListeningPorts()[i]);
@@ -226,6 +229,8 @@ ServerConfig ConfigParser::server()
 		Location loc = server.getLocations()[i];
 		if (loc.getRoot().empty())
 			loc.setRoot(server.getRoot());
+		if (loc.getIndex().empty())
+			loc.setIndex(server.getIndex());
 		if (loc.getRoot().empty() && !loc.hasRedirect())
 			fail("location requires a root");
 		result.addLocation(loc);

@@ -29,7 +29,7 @@ public:
     bool listenSocket();
 
     // Connection
-    int acceptClient();
+    int acceptClient(struct sockaddr_in* peer = NULL);
 
     // Getters
     const ServerConfig& getConfig() const;
