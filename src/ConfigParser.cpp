@@ -5,7 +5,10 @@
 #include <limits>
 #include <algorithm>
 
-ConfigParser::ConfigParser(std::istream &stream) : input(stream), line(1) { next(); }
+ConfigParser::ConfigParser(std::istream &stream) : input(stream), line(1)
+{
+    next();
+}
 
 void ConfigParser::fail(const std::string &message) const
 {
@@ -29,9 +32,7 @@ void ConfigParser::next()
             continue;
         if (c == '#')
         {
-            while (input.get(c) && c != '\n')
-            {
-            }
+            while (input.get(c) && c != '\n') { }
             if (c == '\n')
                 ++line;
             continue;
@@ -211,8 +212,6 @@ ServerConfig ConfigParser::server()
     expect("}");
     if (server.getListeningPorts().empty())
         fail("server requires a listen directive");
-    // Apply server defaults after the complete block, regardless of directive
-    // order. Locations keep explicit overrides for both root and index.
     ServerConfig result;
     result.setHost(server.getHost());
     result.setServerName(server.getServerName());
@@ -220,10 +219,14 @@ ServerConfig ConfigParser::server()
     result.setIndex(server.getIndex());
     result.setMaxBodySize(server.getMaxBodySize());
     for (size_t i = 0; i < server.getListeningPorts().size(); ++i)
+    {
         result.addListenPort(server.getListeningPorts()[i]);
+    }
     const std::map<int, std::string> &errors = server.getErrorPages();
     for (std::map<int, std::string>::const_iterator it = errors.begin(); it != errors.end(); ++it)
+    {
         result.addErrorPage(it->first, it->second);
+    }
     for (size_t i = 0; i < server.getLocations().size(); ++i)
     {
         Location loc = server.getLocations()[i];
@@ -238,24 +241,56 @@ ServerConfig ConfigParser::server()
     return result;
 }
 
-Config ConfigParser::parse()
+std::vector<ServerConfig> ConfigParser::parse()
 {
-    Config result;
+    std::vector<ServerConfig> servers;
+
     while (!token.empty())
-        result.addServer(server());
-    if (!result.validate())
-        fail("configuration requires at least one server");
-    return result;
+        servers.push_back(server());
+
+    validate(servers);
+
+    return servers;
 }
 
-void Config::parseFile(const std::string &filename)
+void ConfigParser::validate(const std::vector<ServerConfig> &servers) const
+{
+    if (servers.empty())
+        fail("configuration requires at least one server");
+
+    for (std::size_t i = 0; i < servers.size(); ++i)
+    {
+        const std::vector<int> &ports =
+            servers[i].getListeningPorts();
+
+        if (ports.empty())
+            fail("server requires a listen directive");
+
+        for (std::size_t j = 0; j < ports.size(); ++j)
+        {
+            if (ports[j] < 1 || ports[j] > 65535)
+                fail("invalid listen port");
+        }
+    }
+}
+
+std::vector<ServerConfig> ConfigParser::parseFile(const std::string &filename)
 {
     std::ifstream file(filename.c_str());
+
     if (!file)
+    {
         throw std::runtime_error("Cannot open configuration file: " + filename);
+    }
+
     ConfigParser parser(file);
-    Config parsed = parser.parse();
+
+    std::vector<ServerConfig> servers = parser.parse();
+
     if (file.bad())
+    {
         throw std::runtime_error("Cannot read configuration file: " + filename);
-    servers = parsed.getServers();
+    }
+
+    return servers;
 }

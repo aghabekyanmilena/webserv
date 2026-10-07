@@ -1,5 +1,5 @@
 #include "include/NetworkManager.hpp"
-#include "include/Config.hpp"
+#include "include/ConfigParser.hpp"
 #include "include/HttpParser.hpp"
 #include "include/RequestHandler.hpp"
 #include "include/ResponseBuilder.hpp"
@@ -99,11 +99,11 @@ int main(int argc, char **argv)
     }
     try
     {
-        Config config;
-        config.parseFile(argc == 2 ? argv[1] : "configs/webserv.conf");
+        const std::string filename = (argc == 2) ? argv[1] : "configs/webserv.conf";
+        std::vector<ServerConfig> servers = ConfigParser::parseFile(filename);
+
         NetworkManager network;
         network.setAsyncReqProcessor(processRequest, processCgiResponse);
-        const std::vector<ServerConfig> &servers = config.getServers();
         for (std::size_t i = 0; i < servers.size(); ++i)
         {
             network.addServer(servers[i]);
@@ -121,5 +121,6 @@ int main(int argc, char **argv)
         std::cerr << "Unexpected WEBSERV failure" << std::endl;
         return 1;
     }
+
     return 0;
 }

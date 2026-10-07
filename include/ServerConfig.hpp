@@ -7,16 +7,6 @@
 
 class ServerConfig
 {
-private:
-    std::vector<int> listen_ports;
-    std::vector<Location> locations;
-    std::map<int, std::string> error_pages;
-    size_t max_body_size;
-    std::string host;
-    std::string server_name;
-    std::string root;
-    std::string index;
-
 public:
     ServerConfig();
     ServerConfig(const ServerConfig &other);
@@ -42,4 +32,15 @@ public:
     const std::map<int, std::string> &getErrorPages() const;
     size_t getMaxBodySize() const;
     const Location *findLocation(const std::string &path) const;
+
+private:
+    std::vector<int> listen_ports;
+    std::vector<Location> locations;
+    std::map<int, std::string> error_pages;
+    size_t max_body_size;
+    std::string host;
+    std::string server_name;
+    std::string root;
+    std::string index;
+
 };

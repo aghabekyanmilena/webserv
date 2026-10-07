@@ -1,8 +1,8 @@
 #pragma once
 
 #include "RequestUtils.hpp"
-#include "Config.hpp"
 #include "Location.hpp"
+#include "ServerConfig.hpp"
 
 class RequestRouting : public RequestUtils
 {

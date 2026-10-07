@@ -1,14 +1,9 @@
 #include "../include/ServerConfig.hpp"
 
-ServerConfig::ServerConfig() : max_body_size(1000000), host("127.0.0.1"), index("index.html") {}
+ServerConfig::ServerConfig() : max_body_size(1000000), host("127.0.0.1"), index("index.html") { }
 
-ServerConfig::ServerConfig(const ServerConfig &other)
-    : listen_ports(other.listen_ports),
-    locations(other.locations),
-    error_pages(other.error_pages),
-    max_body_size(other.max_body_size), host(other.host),
-    server_name(other.server_name), root(other.root), index(other.index)
-{}
+ServerConfig::ServerConfig(const ServerConfig &other) : listen_ports(other.listen_ports), locations(other.locations), error_pages(other.error_pages), max_body_size(other.max_body_size), host(other.host), server_name(other.server_name), root(other.root), index(other.index)
+{ }
 
 ServerConfig &ServerConfig::operator=(const ServerConfig &other)
 {
@@ -26,7 +21,7 @@ ServerConfig &ServerConfig::operator=(const ServerConfig &other)
     return *this;
 }
 
-ServerConfig::~ServerConfig() {}
+ServerConfig::~ServerConfig() { }
 
 void ServerConfig::addListenPort(int port)
 {
@@ -77,11 +72,44 @@ const Location *ServerConfig::findLocation(const std::string &path) const
     }
     return NULL;
 }
-void ServerConfig::setHost(const std::string &value) { host = value; }
-void ServerConfig::setServerName(const std::string &value) { server_name = value; }
-void ServerConfig::setRoot(const std::string &value) { root = value; }
-void ServerConfig::setIndex(const std::string &value) { index = value; }
-const std::string &ServerConfig::getHost() const { return host; }
-const std::string &ServerConfig::getServerName() const { return server_name; }
-const std::string &ServerConfig::getRoot() const { return root; }
-const std::string &ServerConfig::getIndex() const { return index; }
+
+void ServerConfig::setHost(const std::string &value)
+{
+    host = value;
+}
+
+void ServerConfig::setServerName(const std::string &value)
+{
+    server_name = value;
+}
+
+void ServerConfig::setRoot(const std::string &value)
+{
+    root = value;
+}
+
+void ServerConfig::setIndex(const std::string &value)
+{
+    index = value;
+}
+
+const std::string &ServerConfig::getHost() const
+{
+    return host;
+}
+
+const std::string &ServerConfig::getServerName() const
+{
+    return server_name;
+}
+
+const std::string &ServerConfig::getRoot() const
+{
+    return root;
+}
+
+const std::string &ServerConfig::getIndex() const
+{
+    return index;
+}
+
