@@ -25,8 +25,7 @@ std::string RequestUtils::encodePathSegment(const std::string& name) const
     for (std::size_t i = 0; i < name.size(); ++i)
     {
         const unsigned char c = static_cast<unsigned char>(name[i]);
-        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
-            || (c >= '0' && c <= '9') || c == '-' || c == '.' || c == '_' || c == '~')
+        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '.' || c == '_' || c == '~')
             encoded += static_cast<char>(c);
         else
         {
@@ -35,7 +34,6 @@ std::string RequestUtils::encodePathSegment(const std::string& name) const
             encoded += hex[c & 15];
         }
     }
-    // Avoid a relative link such as "a:b" being interpreted as a URL scheme.
     return "./" + encoded;
 }
 
@@ -72,14 +70,16 @@ bool RequestUtils::decodeUriPath(const std::string& encoded, std::string& decode
 
 bool RequestUtils::isPathSafe(const std::string& path) const
 {
-    if (path.empty() || path[0] != '/') return false;
+    if (path.empty() || path[0] != '/')
+        return false;
     std::size_t start = 1;
     while (start <= path.size())
     {
         const std::size_t end = path.find('/', start);
         if (path.substr(start, end == std::string::npos ? end : end - start) == "..")
             return false;
-        if (end == std::string::npos) break;
+        if (end == std::string::npos)
+            break;
         start = end + 1;
     }
     return true;

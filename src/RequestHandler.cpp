@@ -28,9 +28,7 @@ HTTPResponse RequestHandler::handleRequest(const HTTPRequest& originalRequest, c
         return response;
     }
     const std::string& cgiExtension = location->getCgiExtension();
-    if (!cgiExtension.empty() && request.uri.size() >= cgiExtension.size() &&
-        request.uri.compare(request.uri.size() - cgiExtension.size(), cgiExtension.size(), cgiExtension) == 0 &&
-        (request.method == "GET" || request.method == "POST"))
+    if (!cgiExtension.empty() && request.uri.size() >= cgiExtension.size() && request.uri.compare(request.uri.size() - cgiExtension.size(), cgiExtension.size(), cgiExtension) == 0 && (request.method == "GET" || request.method == "POST"))
         return makeErrorResponse(501, "501 CGI Integration Required");
     if (request.method == "GET")
         return handleGet(request, *location);

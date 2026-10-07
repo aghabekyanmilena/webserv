@@ -10,7 +10,6 @@ class RequestCgi : public RequestResources
         CgiResult prepareCgi(const HTTPRequest& request, const ServerConfig& config,
             const CgiContext& context, CgiRequest& plan, HTTPResponse& error) const;
 
-        // Call after CgiProcess has finished successfully (stdout reached EOF).
         HTTPResponse parseCgiOutput(const std::string& output) const;
 
     protected:
