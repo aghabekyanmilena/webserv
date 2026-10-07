@@ -36,5 +36,3 @@ public:
     size_t getContentLength() const;
     bool isChunked() const;
 };
-
-// constructors and destructor

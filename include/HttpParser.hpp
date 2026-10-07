@@ -18,9 +18,7 @@ public:
     };
 
     static const std::size_t MAX_HEADER_SIZE = 8192;
-
-    ParseResult parse(const std::string &raw, HttpRequest &request,
-                      std::size_t maxBodySize = std::numeric_limits<std::size_t>::max()) const;
+    ParseResult parse(const std::string &raw, HttpRequest &request, std::size_t maxBodySize = std::numeric_limits<std::size_t>::max()) const;
 
 private:
     static bool tokenChar(unsigned char c);
@@ -28,10 +26,10 @@ private:
     static bool ipv4(const std::string& text);
     static bool ipLiteral(const std::string& text);
     static bool validHost(const std::string& value);
+
     bool parseRequestLine(const std::string &line, HttpRequest &request) const;
     bool parseHeaders(const std::string &headerBlock, HttpRequest &request) const;
-    ParseResult parseBody(const std::string &body, HttpRequest &request,
-                          std::size_t maxBodySize) const;
+    ParseResult parseBody(const std::string &body, HttpRequest &request, std::size_t maxBodySize) const;
     bool decodePath(const std::string &rawPath, std::string &decoded) const;
     bool normalizePath(const std::string &path, std::string &normalized) const;
     static int hexValue(char c);
