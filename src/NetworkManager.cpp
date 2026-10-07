@@ -7,20 +7,13 @@
 #include <stdexcept>
 #include <unistd.h>
 #include <cctype>
-#include <new>
 #include <sstream>
 
 static std::string errorResponse(int status, const ServerConfig& config)
 {
-#ifdef WEBSERV_FAULT_INJECT
-    (void)status;
-    (void)config;
-    throw std::bad_alloc();
-#else
     HttpResponse response = ResponseBuilder::makeError(status, "", config);
     response.setHeader("Connection", "close");
     return ResponseBuilder::serialize(response);
-#endif
 }
 
 volatile sig_atomic_t NetworkManager::_stopRequested = 0;
