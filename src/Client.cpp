@@ -11,20 +11,17 @@ static const std::size_t MAX_HEADER_SIZE = 8192;
 Client::Client(int fd) : _fd(fd), _listeningPort(-1), _config(), _remoteAddr(), _readBuf(), _writeBuf(), _lastActivity(std::time(NULL)), _requestStartedAt(_lastActivity), _responseQueuedAt(0),
     _emergencyResponse(NULL), _emergencySent(0), _headerEnd(std::string::npos), _bodyExpected(0), _chunkPos(0), _chunkSize(0), _decodedBodySize(0), _chunkState(0), _requestError(0), _chunked(false),
     _configSelected(false), _requestComplete(false), _requestReady(false), _responsePending(false), _closed(false)
-{
-}
+{ }
 
 Client::Client(int fd, const ServerConfig& config) : _fd(fd), _listeningPort(-1), _config(config), _remoteAddr(), _readBuf(), _writeBuf(), _lastActivity(std::time(NULL)), _requestStartedAt(_lastActivity),
     _responseQueuedAt(0), _emergencyResponse(NULL), _emergencySent(0), _headerEnd(std::string::npos), _bodyExpected(0), _chunkPos(0), _chunkSize(0), _decodedBodySize(0), _chunkState(0), _requestError(0),
     _chunked(false), _configSelected(true), _requestComplete(false), _requestReady(false), _responsePending(false), _closed(false)
-{
-}
+{ }
 
 Client::Client(int fd, const ServerConfig& config, int listenPort) : _fd(fd), _listeningPort(listenPort), _config(config), _remoteAddr(), _readBuf(), _writeBuf(), _lastActivity(std::time(NULL)),
     _requestStartedAt(_lastActivity), _responseQueuedAt(0), _emergencyResponse(NULL), _emergencySent(0), _headerEnd(std::string::npos), _bodyExpected(0), _chunkPos(0), _chunkSize(0), _decodedBodySize(0),
     _chunkState(0), _requestError(0), _chunked(false), _configSelected(false), _requestComplete(false), _requestReady(false), _responsePending(false), _closed(false)
-{
-}
+{ }
 
 Client::~Client() { }
 
@@ -47,14 +44,19 @@ void Client::setConfig(const ServerConfig& config)
 {
     _config = config;
     _configSelected = true;
-    if (_requestError == 0 && _headerEnd != std::string::npos
-        && (_bodyExpected > _config.getMaxBodySize()
-            || _decodedBodySize > _config.getMaxBodySize()))
+    if (_requestError == 0 && _headerEnd != std::string::npos && (_bodyExpected > _config.getMaxBodySize() || _decodedBodySize > _config.getMaxBodySize()))
         _requestError = 413;
 }
 
-void Client::setRemoteAddress(const std::string& address) { _remoteAddr = address; }
-const std::string& Client::getRemoteAddress() const { return _remoteAddr; }
+void Client::setRemoteAddress(const std::string& address)
+{
+    _remoteAddr = address;
+}
+
+const std::string& Client::getRemoteAddress() const
+{
+    return _remoteAddr;
+}
 
 bool Client::receiveData()
 {
@@ -68,7 +70,10 @@ bool Client::receiveData()
         try
         {
             if (_requestComplete)
-            { update_last_activity(); return true; }
+            {
+                update_last_activity();
+                return true;
+            }
             const std::size_t oldSize = _readBuf.size();
             _readBuf.append(buffer, static_cast<std::string::size_type>(bytesRead));
             if (_requestReady || _requestComplete || _requestError)

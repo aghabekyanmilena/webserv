@@ -34,24 +34,17 @@ static bool parseIPv4Address(const std::string& host, unsigned long& address)
     if (!stream.eof())
         return false;
 
-    address = (static_cast<unsigned long>(octet1) << 24)
-            | (static_cast<unsigned long>(octet2) << 16)
-            | (static_cast<unsigned long>(octet3) << 8)
-            | static_cast<unsigned long>(octet4);
+    address = (static_cast<unsigned long>(octet1) << 24) | (static_cast<unsigned long>(octet2) << 16) | (static_cast<unsigned long>(octet3) << 8) | static_cast<unsigned long>(octet4);
     return true;
 }
 
-ServerSocket::ServerSocket(const std::string& host, int port)
-    : _fd(-1), _host(host), _port(port), _config()
+ServerSocket::ServerSocket(const std::string& host, int port) : _fd(-1), _host(host), _port(port), _config()
 {
     _config.setHost(host);
     _config.addListenPort(port);
 }
 
-ServerSocket::ServerSocket(const ServerConfig& config, int port)
-    : _fd(-1), _host(config.getHost()), _port(port), _config(config)
-{
-}
+ServerSocket::ServerSocket(const ServerConfig& config, int port) : _fd(-1), _host(config.getHost()), _port(port), _config(config) { }
 
 ServerSocket::~ServerSocket()
 {
@@ -66,14 +59,12 @@ bool ServerSocket::create()
     _fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
     if (_fd == -1)
     {
-        std::cerr << "socket() failed for " << _host << ":" << _port
-                  << ": " << std::strerror(errno) << std::endl;
+        std::cerr << "socket() failed for " << _host << ":" << _port << ": " << std::strerror(errno) << std::endl;
         return false;
     }
 
     int reuseAddress = 1;
-    if (setsockopt(_fd, SOL_SOCKET, SO_REUSEADDR,
-                   &reuseAddress, sizeof(reuseAddress)) == -1)
+    if (setsockopt(_fd, SOL_SOCKET, SO_REUSEADDR, &reuseAddress, sizeof(reuseAddress)) == -1)
     {
         std::cerr << "setsockopt(SO_REUSEADDR) failed for "
                   << _host << ":" << _port << ": " << std::strerror(errno) << std::endl;
@@ -112,11 +103,9 @@ bool ServerSocket::bindSocket()
 
     const struct sockaddr_in address = create_addr();
 
-    if (bind(_fd, reinterpret_cast<const struct sockaddr*>(&address),
-             sizeof(address)) == -1)
+    if (bind(_fd, reinterpret_cast<const struct sockaddr*>(&address), sizeof(address)) == -1)
     {
-        std::cerr << "bind() failed for " << _host << ":" << _port
-                  << ": " << std::strerror(errno) << std::endl;
+        std::cerr << "bind() failed for " << _host << ":" << _port << ": " << std::strerror(errno) << std::endl;
         return false;
     }
 
@@ -130,8 +119,7 @@ bool ServerSocket::listenSocket()
 
     if (listen(_fd, SOMAXCONN) == -1)
     {
-        std::cerr << "listen() failed for " << _host << ":" << _port
-                  << ": " << std::strerror(errno) << std::endl;
+        std::cerr << "listen() failed for " << _host << ":" << _port << ": " << std::strerror(errno) << std::endl;
         return false;
     }
 
@@ -144,14 +132,11 @@ int ServerSocket::acceptClient(struct sockaddr_in* peer)
         return -1;
 
     socklen_t length = sizeof(struct sockaddr_in);
-    const int clientFd = accept(_fd, reinterpret_cast<struct sockaddr*>(peer),
-        peer == NULL ? NULL : &length);
+    const int clientFd = accept(_fd, reinterpret_cast<struct sockaddr*>(peer), (peer == NULL) ? NULL : &length);
 
     if (clientFd == -1)
         return -1;
 
-    // Linux accept() does not inherit O_NONBLOCK. Client uses MSG_DONTWAIT on
-    // every poll-driven recv/send, without adding the unlisted accept4().
     return clientFd;
 }
 

@@ -2,34 +2,34 @@
 
 void Config::addServer(const ServerConfig &server)
 {
-	servers.push_back(server);
+    servers.push_back(server);
 }
 
 const std::vector<ServerConfig> &Config::getServers() const
 {
-	return servers;
+    return servers;
 }
 
 bool Config::validate() const
 {
-	if (servers.empty())
-		return false;
+    if (servers.empty())
+        return false;
 
-	for (std::size_t i = 0; i < servers.size(); ++i)
-	{
-		const ServerConfig &server = servers[i];
+    for (std::size_t i = 0; i < servers.size(); ++i)
+    {
+        const ServerConfig &server = servers[i];
 
-		if (server.getListeningPorts().empty())
-			return false;
+        if (server.getListeningPorts().empty())
+            return false;
 
-		const std::vector<int> &ports = server.getListeningPorts();
+        const std::vector<int> &ports = server.getListeningPorts();
 
-		for (std::size_t j = 0; j < ports.size(); ++j)
-		{
-			if (ports[j] < 1 || ports[j] > 65535)
-				return false;
-		}
+        for (std::size_t j = 0; j < ports.size(); ++j)
+        {
+            if (ports[j] < 1 || ports[j] > 65535)
+                return false;
+        }
     }
 
-	return true;
+    return true;
 }

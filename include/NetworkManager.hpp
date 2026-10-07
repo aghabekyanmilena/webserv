@@ -15,99 +15,98 @@
 class NetworkManager
 {
 public:
-	class ExtraFd
-	{
-	public:
-		typedef void (*Callback)(int, short, void *);
-		ExtraFd() : fd(-1), events(0), callback(NULL), context(NULL) {}
-		ExtraFd(int value, short wantedEvents, Callback cb, void *ctx)
-			: fd(value), events(wantedEvents), callback(cb), context(ctx) {}
-		int fd;
-		short events;
-		Callback callback;
-		void *context;
-	};
+    struct ExtraFd
+    {
+        typedef void (*Callback)(int, short, void *);
 
-	typedef bool (*RequestProcessor)(const std::string &, const ServerConfig &, std::string &);
-	typedef bool (*AsyncRequestProcessor)(const std::string &, const ServerConfig &,
-		std::string &, CgiRequest &, const CgiContext &);
-	typedef std::string (*CgiResponseProcessor)(const std::string &, const ServerConfig &);
+        ExtraFd() : fd(-1), events(0), callback(NULL), context(NULL) {}
+        ExtraFd(int value, short wantedEvents, Callback cb, void *ctx) : fd(value), events(wantedEvents), callback(cb), context(ctx) { }
 
-private:
-	std::vector<ServerSocket> _servers;
-	std::vector<ServerConfig> _serverConfigs;
-	std::map<int, Client> _clients;
-	std::vector<pollfd> _pollFds;
-	std::map<int, ExtraFd> _extraFds;
-	int _connectionTimeout;
-	int _drainTimeout;
-	std::string _fallback408;
-	std::string _fallback500;
-	std::time_t _listenersPausedUntil;
-	RequestProcessor _requestProcessor;
-	AsyncRequestProcessor _asyncRequestProcessor;
-	CgiResponseProcessor _cgiResponseProcessor;
-	struct CgiJob
-	{
-		CgiProcess process;
-		int inputFd;
-		int outputFd;
-		CgiJob() : inputFd(-1), outputFd(-1) {}
-	};
-	std::map<int, CgiJob*> _cgiJobs;
-	static volatile sig_atomic_t _stopRequested;
+        int fd;
+        short events;
+        Callback callback;
+        void *context;
+    };
 
-	bool hasListener(const std::string &host, int port) const;
-	static std::string extractHostHeader(const std::string &raw);
-	static std::string normalizeHost(const std::string &host);
-	const ServerConfig &selectConfig(const std::string &listenHost, int listenPort,
-									const std::string &host) const;
-	static void handleSignal(int signalNumber);
-	void sendFallbackResponse(int clientFd, const std::string &response);
-	void startCgi(int clientFd, const CgiRequest &plan);
-	void cancelCgi(int clientFd);
-	void refreshCgiFds(CgiJob &job);
-	void checkCgiJobs();
-	void handleCgiEvent(int fd, short events);
-	void failCgiFd(int fd);
-	static void cgiCallback(int fd, short events, void *context);
+    typedef bool (*RequestProcessor)(const std::string &, const ServerConfig &, std::string &);
+    typedef bool (*AsyncRequestProcessor)(const std::string &, const ServerConfig &,
+        std::string &, CgiRequest &, const CgiContext &);
+    typedef std::string (*CgiResponseProcessor)(const std::string &, const ServerConfig &);
 
 public:
-	NetworkManager();
-	~NetworkManager();
-	void setRequestProcessor(RequestProcessor processor);
-	void setAsyncRequestProcessor(AsyncRequestProcessor processor, CgiResponseProcessor responseProcessor);
+    NetworkManager();
+    ~NetworkManager();
+    void setAsyncReqProcessor(AsyncRequestProcessor processor, CgiResponseProcessor responseProcessor);
 
-	void addServer(const std::string &host, int port);
-	void addServer(const ServerConfig &config);
-	void initializeServers();
-	void run();
+    void addServer(const std::string &host, int port);
+    void addServer(const ServerConfig &config);
+    void initializeServers();
+    void run();
 
-	void buildPollFds();
-	void processEvents();
-	void handleNewConnection(ServerSocket &server);
-	void handleClientRead(int clientFd);
-	void handleClientWrite(int clientFd);
+    bool addExtraFd(int fd, short events, ExtraFd::Callback callback, void *context);
 
-	void addClient(int clientFd);
-	void addClient(int clientFd, const ServerConfig &config);
-	void addClient(int clientFd, const ServerConfig &config, int listenPort);
-	void removeClient(int clientFd);
+    void shutdown();
 
-	// Timeout handling
-	void checkTimeouts();
-	void shedIdleClients();
+private:
+    std::vector<ServerSocket> _servers;
+    std::vector<ServerConfig> _serverConfigs;
+    std::map<int, Client> _clients;
+    std::vector<pollfd> _pollFds;
+    std::map<int, ExtraFd> _extraFds;
+    int _connectionTimeout;
+    int _clearTimeout;
+    std::string _fallback408;
+    std::string _fallback500;
+    std::time_t _listenersPausedUntil;
+    RequestProcessor _requestProcessor;
+    AsyncRequestProcessor _asyncRequestProcessor;
+    CgiResponseProcessor _cgiResponseProcessor;
 
-	// Interface toward HTTP/application layer
-	// Valid until this client is removed; NULL for an unknown client.
-	const ServerConfig *getClientConfig(int clientFd) const;
-	std::string receiveRequest(int clientFd);
-	void sendResponse(int clientFd, const std::string &response);
+    struct CgiJob
+    {
+        CgiProcess process;
+        int inputFd;
+        int outputFd;
+        CgiJob() : inputFd(-1), outputFd(-1) {}
+    };
+    std::map<int, CgiJob*> _cgiJobs;
+    static volatile sig_atomic_t _stopRequested;
 
-	// On false, ownership stays with the caller, which must close/cancel the fd.
-	// Owners must use nonblocking I/O (descriptor flags or MSG_DONTWAIT).
-	bool addExtraFd(int fd, short events, ExtraFd::Callback callback, void *context);
-	void removeExtraFd(int fd);
+    void set_req_processor(RequestProcessor processor);
 
-	void shutdown();
+    bool has_listener(const std::string &host, int port) const;
+    static std::string extract_host_header(const std::string &raw);
+    static std::string normalize_host(const std::string &host);
+    const ServerConfig &select_config(const std::string &listenHost, int listenPort,
+                                    const std::string &host) const;
+    static void handle_signal(int signalNumber);
+    void send_fallback_resp(int clientFd, const std::string &response);
+
+    void start_cgi(int clientFd, const CgiRequest &plan);
+    void cancel_cgi(int clientFd);
+    void refresh_cgi_fds(CgiJob &job);
+    void check_cgi_jobs();
+    void handle_cgi_event(int fd, short events);
+    void fail_cgi_fd(int fd);
+    static void cgi_callback(int fd, short events, void *context);
+
+    const ServerConfig *get_client_config(int clientFd) const;
+    void remove_extra_fd(int fd);
+    void remove_free_clients();
+    void remove_client(int clientFd);
+
+    void build_poll_fds();
+    void process_events();
+    void handle_new_connection(ServerSocket &server);
+    void handle_client_read(int clientFd);
+    void handle_client_write(int clientFd);
+
+    void add_client(int clientFd);
+    void add_client(int clientFd, const ServerConfig &config);
+    void add_client(int clientFd, const ServerConfig &config, int listenPort);
+
+    void send_resp(int clientFd, const std::string &response);
+
+    void check_timeouts();
+
 };
