@@ -10,7 +10,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 script = ROOT / "www" / "cgi-bin" / "hello.py"
 ast.parse(script.read_text(encoding="utf-8"))
-for method, body in (("GET", b""), ("POST", b"hello CGI")):
+for method, body in (("GET", b""), ("POST", b""), ("POST", b"hello"), ("POST", "é".encode("utf-8"))):
     env = os.environ.copy()
     env.update(REQUEST_METHOD=method, QUERY_STRING="name=Arina%20%26%20team",
                CONTENT_LENGTH=str(len(body)))
@@ -20,6 +20,7 @@ for method, body in (("GET", b""), ("POST", b"hello CGI")):
     assert b"Content-Type: text/html" in headers
     assert b"Hello, Arina &amp; team!" in page
     assert b"CGI relative path works" in page
+    assert f"Body length (bytes): {len(body)}".encode() in page
     if body:
         assert body in page
 print("CGI demonstration GET/POST checks passed")

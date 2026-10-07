@@ -153,11 +153,15 @@ void NetworkManager::initializeServers()
 void NetworkManager::run()
 {
     _stopRequested = 0;
+    bool recovering = false;
     while (!_stopRequested)
     {
         try
         {
-            build_poll_fds();
+            if (recovering)
+                _pollFds.clear();
+            else
+                build_poll_fds();
             if (_pollFds.empty())
             {
                 bool has_listener = false;
@@ -165,13 +169,12 @@ void NetworkManager::run()
                     has_listener = has_listener || _servers[i].getFd() != -1;
                 if (!has_listener && _clients.empty() && _extraFds.empty())
                     break;
-                poll(NULL, 0, 100);
-                check_cgi_jobs();
-                check_timeouts();
-                continue;
             }
 
-            const int readyCount = poll(&_pollFds[0], _pollFds.size(), 1000);
+            // Empty sets also use this call for listener/recovery backoff.
+            const int readyCount = poll(_pollFds.empty() ? NULL : &_pollFds[0],
+                _pollFds.size(), _pollFds.empty() ? 100 : 1000);
+            recovering = false;
             if (readyCount > 0)
                 process_events();
 
@@ -180,7 +183,7 @@ void NetworkManager::run()
         }
         catch (...)
         {
-            poll(NULL, 0, 100);
+            recovering = true;
         }
     }
 }
@@ -823,11 +826,7 @@ void NetworkManager::shutdown()
     {
         cancel_cgi(_cgiJobs.begin()->first);
     }
-    for (int i = 0; i < 10; ++i)
-    {
-        CgiProcess::reapAbandoned();
-        poll(NULL, 0, 10);
-    }
+    CgiProcess::reapAbandoned(true);
     for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it)
     {
         it->second.closeConnection();

@@ -105,12 +105,13 @@ def main():
                         if time.monotonic() >= deadline:
                             raise
                         time.sleep(0.05)
-                for method, body in (("GET", None), ("POST", b"hello CGI")):
+                for method, body in (("GET", None), ("POST", b""), ("POST", b"hello"), ("POST", "é".encode("utf-8"))):
                     status, headers, page = request(method, "/cgi/hello.py?name=Arina%20%26%20team", body)
                     assert status == 200, (method, status)
                     assert b"Hello, Arina &amp; team!" in page
                     assert b"CGI relative path works" in page
                     assert int(headers["Content-Length"]) == len(page)
+                    assert f"Body length (bytes): {len(body or b'')}".encode() in page
                     if body:
                         assert body in page
                 curl = subprocess.run(["curl", "--silent", "--show-error", "--fail", "--include",
@@ -121,7 +122,7 @@ def main():
                 # Parser must decode chunked input before handing it to CGI stdin.
                 status, _, page = request("POST", "/cgi/hello.py", b"5\r\nhello\r\n0\r\n\r\n",
                                           {"Transfer-Encoding": "chunked"})
-                assert status == 200 and b"hello" in page
+                assert status == 200 and b"hello" in page and b"Body length (bytes): 5" in page
                 status, _, page = request("GET", "/cgi/large.py")
                 assert status == 200 and page == b"x" * 32768
                 # Exceed socket buffers and exchange binary input/output at

@@ -70,6 +70,6 @@ public:
     // Call on EVERY event-loop iteration, including poll timeouts.
     void tick(std::time_t now);
 
-    // Also call when no active CGI jobs remain; never waits for a running child.
-    static void reapAbandoned();
+    // Nonblocking in the event loop; wait for cancelled children at shutdown.
+    static void reapAbandoned(bool wait = false);
 };

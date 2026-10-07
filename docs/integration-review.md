@@ -6,10 +6,8 @@ body reach the plan; chunk framing is removed before stdin is written. CGI
 status, headers, and content length use that parser and `ResponseBuilder`.
 Valid CGI entity bodies are preserved, including empty error bodies.
 
-Legacy `Cgi.cpp` is excluded from the executable's source list. Its `Cgi.hpp`
-declares a different `CgiContext` from `CgiContext.hpp`; linking both definitions
-violates the C++ one-definition rule. The reserved legacy source is unchanged
-and is not part of the active integration.
+The unused legacy CGI implementation has been removed. CGI context comes from
+`CgiContext.hpp`, and the active implementation uses `RequestCgi` and `CgiProcess`.
 
 ## Root containment
 
@@ -54,8 +52,7 @@ and upload/DELETE operations continue to work.
 
 ## Integration scope
 
-Legacy `src/Cgi.cpp` remains excluded. CGI uses the existing network/main handoff
-and single poll loop. HTTP request validation rejects invalid method tokens,
+CGI uses the existing network/main handoff and single poll loop. HTTP request validation rejects invalid method tokens,
 Host values, header controls, and bare header newlines. Response serialization
 omits bodies and Content-Length for 204 responses. Uploads supply Location, and
 PDF files use application/pdf. No custom namespaces are defined in the server.

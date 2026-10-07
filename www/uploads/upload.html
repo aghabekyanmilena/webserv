@@ -6,7 +6,9 @@
   <title>webserv demonstrations</title>
   <style>
     body { max-width: 42rem; margin: 3rem auto; padding: 0 1rem; font: 1rem/1.6 sans-serif; }
-    input, button { font: inherit; margin: .3rem 0; }
+    input, button, textarea { font: inherit; margin: .3rem 0; }
+    textarea { display: block; width: 100%; box-sizing: border-box; }
+    iframe { width: 100%; min-height: 18rem; border: 1px solid #ccc; }
     section { margin: 2rem 0; }
     pre { padding: 1rem; background: #eee; white-space: pre-wrap; }
   </style>
@@ -31,6 +33,17 @@
     </form>
   </section>
   <section>
+    <h2>Python CGI</h2>
+    <p>Send text to Python and see its body length in bytes. UTF-8 characters can use more than one byte.</p>
+    <form id="cgi" method="post" action="/cgi-bin/hello.py">
+      <label for="cgi-body">Request body</label>
+      <textarea id="cgi-body" name="body" rows="4" placeholder="hello"></textarea>
+      <button type="submit">Run Python CGI</button>
+    </form>
+    <p id="cgi-status" role="status" aria-live="polite"></p>
+    <iframe id="cgi-result" title="Python CGI response" sandbox hidden></iframe>
+  </section>
+  <section>
     <h2>More features</h2>
     <ul>
       <li><a href="/cgi-bin/hello.py?name=webserv">Python CGI with a query string</a></li>
@@ -51,6 +64,34 @@
         result.textContent = 'Request failed: ' + error.message;
       }
     }
+    document.getElementById('cgi').addEventListener('submit', async function (event) {
+      event.preventDefault();
+      const status = document.getElementById('cgi-status');
+      const frame = document.getElementById('cgi-result');
+      const button = this.querySelector('button');
+      button.disabled = true;
+      frame.hidden = true;
+      status.textContent = 'Running Python CGI…';
+      try {
+        const response = await fetch(this.action, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+          body: document.getElementById('cgi-body').value
+        });
+        const page = await response.text();
+        if (!response.ok) {
+          status.textContent = 'Request failed: ' + response.status + ' ' + response.statusText;
+          return;
+        }
+        frame.srcdoc = page;
+        frame.hidden = false;
+        status.textContent = 'Python CGI response: ' + response.status;
+      } catch (error) {
+        status.textContent = 'Request failed: ' + error.message;
+      } finally {
+        button.disabled = false;
+      }
+    });
     document.getElementById('upload').addEventListener('submit', function (event) {
       event.preventDefault();
       showResponse('/upload', { method: 'POST', body: new FormData(this) });

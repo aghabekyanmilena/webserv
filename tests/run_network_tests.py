@@ -81,7 +81,7 @@ def main():
             subprocess.run(["c++", *flags, "-DWEBSERV_FAULT_INJECT", "-c",
                             "src/NetworkManager.cpp", "-o", str(network_object)], cwd=ROOT, check=True)
             objects = sorted((ROOT / "out").rglob("*.o"))
-            objects = [obj for obj in objects if obj.name not in ("NetworkManager.o", "Cgi.o")]
+            objects = [obj for obj in objects if obj.name != "NetworkManager.o"]
             executable = temp / "webserv-fault"
             subprocess.run(["c++", *flags, *map(str, objects), str(network_object),
                             "-o", str(executable)], cwd=ROOT, check=True)

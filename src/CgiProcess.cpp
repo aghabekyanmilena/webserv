@@ -1,6 +1,7 @@
 #include "CgiProcess.hpp"
 #include "RootedPath.hpp"
 #include <cstdlib>
+#include <cerrno>
 #include <sys/socket.h>
 #include <unistd.h>
 #include <sys/wait.h>
@@ -187,13 +188,23 @@ void CgiProcess::tick(std::time_t now)
     reapAbandoned();
 }
 
-void CgiProcess::reapAbandoned()
+void CgiProcess::reapAbandoned(bool wait)
 {
     Children& pending = children();
     for (Children::iterator it = pending.begin(); it != pending.end(); )
     {
         int status = 0;
-        if (it->abandoned && waitpid(it->pid, &status, WNOHANG) == it->pid)
+        if (!it->abandoned)
+        {
+            ++it;
+            continue;
+        }
+        pid_t result;
+        do
+        {
+            result = waitpid(it->pid, &status, wait ? 0 : WNOHANG);
+        } while (wait && result < 0 && errno == EINTR);
+        if (result == it->pid || (result < 0 && errno == ECHILD))
             it = pending.erase(it);
         else ++it;
     }
