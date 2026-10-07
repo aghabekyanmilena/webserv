@@ -10,6 +10,7 @@ static std::string httpDate()
     char buffer[64];
     std::time_t now = std::time(NULL);
     std::tm *gmt = std::gmtime(&now);
+
     if (gmt == NULL)
         return std::string();
     if (std::strftime(buffer, sizeof(buffer), "%a, %d %b %Y %H:%M:%S GMT", gmt) == 0)
@@ -75,14 +76,12 @@ std::string ResponseBuilder::serialize(const HttpResponse &response)
         std::string name = it->first;
         for (std::size_t i = 0; i < name.size(); ++i)
             name[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(name[i])));
-
         if (name == "content-length")
             continue;
         if (name == "date")
             hasDate = true;
         if (name == "server")
             hasServer = true;
-
         output << it->first << ": " << it->second << "\r\n";
     }
 
@@ -97,12 +96,12 @@ std::string ResponseBuilder::serialize(const HttpResponse &response)
 
     const int status = response.getStatusCode();
     const bool hasContent = status >= 200 && status != 204 && status != 304;
+
     if (hasContent)
         output << "Content-Length: " << response.getBody().size() << "\r\n";
     output << "\r\n";
     if (hasContent)
         output << response.getBody();
-
     return output.str();
 }
 
@@ -121,8 +120,7 @@ HttpResponse ResponseBuilder::makeError(int statusCode, const std::string &body)
     return response;
 }
 
-HttpResponse ResponseBuilder::makeError(int statusCode, const std::string &body,
-                                        const ServerConfig& config)
+HttpResponse ResponseBuilder::makeError(int statusCode, const std::string &body, const ServerConfig& config)
 {
     HttpResponse response = makeError(statusCode, body);
 

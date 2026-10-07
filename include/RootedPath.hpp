@@ -3,7 +3,6 @@
 #include <string>
 #include <sys/stat.h>
 
-// Copies duplicate ownership; every exceptional path still closes its descriptors.
 class OwnedFd
 {
     int _fd;
@@ -17,9 +16,6 @@ public:
     void reset(int fd = -1);
 };
 
-// Linux /proc/self/fd anchors pathname operations to already opened directories.
-// Only the configured root may contain symlinks; every requested component uses
-// O_NOFOLLOW. No realpath, readlink, openat or fcntl calls are needed.
 class RootedPath
 {
     OwnedFd _parent;
